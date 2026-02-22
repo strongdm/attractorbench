@@ -1,4 +1,5 @@
 results/
+jobs/
 __pycache__/
 *.pyc
 .venv/

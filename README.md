@@ -31,6 +31,19 @@ Key properties:
 
 **Tiers 2 and 3** build conceptually on Tier 1 (a coding agent loop, then a DOT-based pipeline runner) and test progressively deeper architectural thinking.
 
+## Leaderboard
+
+Results from initial benchmark runs (2026-02-22). Single attempt per tier, Docker environment.
+
+| Agent | Model | Tier | Build | Self-Test | Conformance | Composite |
+|-------|-------|------|-------|-----------|-------------|-----------|
+| claude-code | claude-sonnet-4-6 | 0 — Smoke Test | pass | 100% | 6/6 (100%) | **1.000** |
+| claude-code | claude-sonnet-4-6 | 1 — Unified LLM SDK | pass | 97.6% | 22/28 (78.6%) | **0.826** |
+| claude-code | claude-sonnet-4-6 | 2 — Agent Loop | pass | 100% | 12/19 (63.2%) | **0.705** |
+| claude-code | claude-sonnet-4-6 | 3 — Attractor Pipeline | pass | 100% | 0/0 (0%) | **0.200** |
+
+Sonnet 4.6 builds reliably across all tiers and writes strong self-tests. Conformance drops with spec complexity — Tier 1 (78.6%) and Tier 2 (63.2%) show solid spec-following, while Tier 3 built and self-tested but didn't wire up the conformance CLI.
+
 ## Quick Start
 
 ### Prerequisites

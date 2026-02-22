@@ -18,12 +18,6 @@ RUN curl -fsSL https://go.dev/dl/go1.23.6.linux-amd64.tar.gz | tar -C /usr/local
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 RUN mkdir -p /workspace /logs /logs/verifier /logs/agent /logs/artifacts /tests
-RUN chmod -R 777 /workspace /logs
+RUN chmod -R 777 /workspace /logs /tests
 
 WORKDIR /workspace
-
-# Copy mock server into the image
-COPY tests/mock_server.py /tests/mock_server.py
-COPY tests/conformance/ /tests/conformance/
-COPY tests/test.sh /tests/test.sh
-COPY tests/score.py /tests/score.py

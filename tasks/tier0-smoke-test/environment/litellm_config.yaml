@@ -1,0 +1,8 @@
+model_list:
+  - model_name: "*"
+    litellm_params:
+      model: "*"
+
+litellm_settings:
+  json_logs: true
+  telemetry: false
