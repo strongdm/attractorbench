@@ -188,6 +188,48 @@ def compare(
 
 
 @app.command()
+def leaderboard(
+    job_dirs: Annotated[list[Path], typer.Argument(help="Paths to Harbor job directories")],
+    sort: Annotated[str, typer.Option(help="Sort column: composite, cost, tokens, time, efficiency")] = "composite",
+    markdown: Annotated[bool, typer.Option("--markdown", help="Output markdown table")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output JSON")] = False,
+) -> None:
+    """Rank agent+model combinations across runs with efficiency metrics."""
+    from attractorbench.leaderboard import (
+        SORT_COLUMNS,
+        build_leaderboard,
+        render_markdown,
+        render_table,
+        sort_leaderboard,
+    )
+
+    missing = [p for p in job_dirs if not p.exists() or not p.is_dir()]
+    if missing:
+        for p in missing:
+            console.print(f"[red]Job directory not found: {p}[/red]")
+        raise typer.Exit(1)
+
+    if sort not in SORT_COLUMNS:
+        console.print(f"[red]Invalid sort column: {sort}. Choose from: {', '.join(SORT_COLUMNS)}[/red]")
+        raise typer.Exit(1)
+
+    lb = build_leaderboard(job_dirs)
+
+    if not lb.entries:
+        console.print("[red]No results found in any job directory[/red]")
+        raise typer.Exit(1)
+
+    lb = sort_leaderboard(lb, sort)
+
+    if json_output:
+        console.print(lb.model_dump_json(indent=2))
+    elif markdown:
+        console.print(render_markdown(lb))
+    else:
+        render_table(lb, console)
+
+
+@app.command()
 def checklist(
     tier: Annotated[Optional[int], typer.Option(help="Tier number (1, 2, or 3)")] = None,
 ) -> None:

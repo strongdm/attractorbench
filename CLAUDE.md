@@ -26,6 +26,7 @@ Benchmark for measuring coding agent compliance with the Attractor NLSpec suite.
 - Conformance tests are language-agnostic (exercise implementations via CLI contract)
 - test.sh always exits 0; pass/fail communicated via /logs/verifier/reward.json
 - Composite score: 10% build + 20% self-test + 70% conformance
+- LiteLLM proxy sidecar in every task (docker-compose.yaml) for automatic token/cost tracking
 
 ## Commands
 
@@ -34,6 +35,7 @@ All commands are run through `uv run`:
 - `uv run attractorbench generate` — Generate Harbor task directories from specs
 - `uv run attractorbench score` — Score a completed Harbor job
 - `uv run attractorbench compare` — Compare results across runs
+- `uv run attractorbench leaderboard` — Rank agent+model combinations across runs
 - `uv run attractorbench checklist` — List DoD checklists
 - `uv run pytest tests/ -v` — Run unit tests
 

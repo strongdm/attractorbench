@@ -13,17 +13,17 @@ Scoring is granular, not pass/fail. Each tier has multiple conformance tests gro
 Key properties:
 - **Language-agnostic.** Agents choose their own implementation language. The only contract is `make build`, `make test`, and `./bin/conformance <subcommand>`.
 - **Deterministic verification.** A mock LLM server returns canned responses — no real API calls, no flakiness.
-- **Weighted composite score.** 10% build success + 20% self-test pass rate + 70% conformance tests.
+- **Weighted composite score.** 10% build success + 10% self-test pass rate + 80% conformance tests.
 - **Cost-aware.** Track tokens and dollars per unit of compliance, not just raw scores.
 
 ## Tiers
 
-| Tier | Name | Spec Lines | Conformance Tests | Agent Timeout | Difficulty |
-|------|------|-----------|-------------------|---------------|------------|
-| 0 | Smoke Test | ~30 | 4 | 5 min | Easy |
-| 1 | Unified LLM SDK | ~2,150 | 10 | 30 min | Hard |
-| 2 | Coding Agent Loop | ~1,450 | 6 | 60 min | Hard |
-| 3 | Attractor Pipeline | ~2,080 | 11 | 60 min | Hard |
+| Tier | Name | Spec Lines | Conformance Tests | DoD Items | Coverage | Agent Timeout | Difficulty |
+|------|------|-----------|-------------------|-----------|----------|---------------|------------|
+| 0 | Smoke Test | ~30 | 6 | 6 | 100% | 5 min | Easy |
+| 1 | Unified LLM SDK | ~2,150 | 28 | 78 | 36% | 30 min | Hard |
+| 2 | Coding Agent Loop | ~1,450 | 20 | 71 | 28% | 60 min | Hard |
+| 3 | Attractor Pipeline | ~2,080 | 28 | 89 | 31% | 60 min | Hard |
 
 **Tier 0** validates plumbing — your Harbor integration, the mock server, and the scoring pipeline all work before you spend 30 minutes on a real run.
 
@@ -85,11 +85,13 @@ harbor run \
 uv run attractorbench score jobs/opus46-tier1
 ```
 
-## Comparing Agents
+## Running an Eval: Step-by-Step
 
-This is where AttractorBench gets interesting. Run the same tier across multiple agents, then compare.
+This is the complete procedure for benchmarking one agent+model combination.
 
 ### Agent/Model Mapping
+
+Pick your agent harness and model. Each agent has a Harbor adapter that handles prompt formatting, tool routing, and context management.
 
 | Model | Harbor Agent | Notes |
 |-------|-------------|-------|
@@ -100,7 +102,122 @@ This is where AttractorBench gets interesting. Run the same tier across multiple
 | Any model | `openhands` | Model-agnostic agent framework — test different models through the same agent architecture. |
 | Any model | `aider` | Git-oriented agent — interesting contrast in approach. |
 
+### Step 1: Generate tasks
+
+Generate once per benchmark version. Regenerate if you update `adapter.py` or the specs.
+
+```bash
+# Tier 0 first to validate plumbing
+uv run attractorbench generate --tiers 0 --output-dir tasks
+
+# Then generate the tier(s) you want to eval
+uv run attractorbench generate --tiers 1 --output-dir tasks
+
+# Or everything at once
+uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+```
+
+### Step 2: Run the smoke test
+
+Always run Tier 0 first. It validates your Harbor install, Docker environment, and the scoring pipeline in under 5 minutes. If Tier 0 fails, debug that before spending 30-60 minutes on a real tier.
+
+```bash
+harbor run \
+  --dataset ./tasks/tier0-smoke-test \
+  --agent claude-code \
+  --model anthropic/claude-opus-4-6 \
+  --env docker
+
+# Verify it scored correctly
+uv run attractorbench score jobs/<tier0-job-name>
+```
+
+### Step 3: Run the real eval
+
+```bash
+# Single tier (recommended starting point)
+harbor run \
+  --dataset ./tasks/tier1-unified-llm \
+  --agent claude-code \
+  --model anthropic/claude-opus-4-6 \
+  --env docker \
+  --job-name opus46-tier1
+
+# All tiers in parallel
+harbor run \
+  --dataset ./tasks \
+  --agent claude-code \
+  --model anthropic/claude-opus-4-6 \
+  --env daytona \
+  --n-concurrent 4 \
+  --job-name opus46-full
+```
+
+### Step 4: Score
+
+```bash
+uv run attractorbench score jobs/opus46-tier1
+```
+
+This reads `reward.json` from the job directory and prints per-task and summary scores.
+
+### Step 5: Efficiency metrics (automatic via LiteLLM sidecar)
+
+Every generated task includes a **LiteLLM proxy sidecar** that automatically intercepts the agent's real LLM API calls during the agent phase, logs token usage and cost, and writes `metadata.json` for the leaderboard.
+
+**How it works:**
+
+1. Harbor starts `docker-compose.yaml` which includes a `litellm` sidecar service alongside the `main` container.
+2. The `main` container's `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` environment variables point to the LiteLLM proxy (`http://litellm:4000/...`).
+3. The proxy forwards all requests to the real provider APIs while logging usage to a shared volume.
+4. During the verifier phase, `harvest_litellm.py` reads the proxy log and writes `/logs/verifier/metadata.json`.
+5. The leaderboard picks up the metadata automatically.
+
+**API keys:** The LiteLLM sidecar reads API keys from the host environment via docker-compose variable substitution (`${OPENAI_API_KEY:-}`, `${ANTHROPIC_API_KEY:-}`, `${GEMINI_API_KEY:-}`). Make sure your keys are set in the environment where Harbor starts the compose.
+
+**Troubleshooting:** If the litellm sidecar fails to start, check that your API keys are set and that the `ghcr.io/berriai/litellm:main-latest` image can be pulled. The harvest step is non-fatal — if it fails, the leaderboard still works (efficiency columns show `—`).
+
+You can also manually provide or override `metadata.json` if needed:
+
+```bash
+cat > jobs/opus46-tier1/metadata.json << 'EOF'
+{
+  "agent": "claude-code",
+  "model": "claude-opus-4-6",
+  "total_tokens": 145200,
+  "prompt_tokens": 98000,
+  "completion_tokens": 47200,
+  "cost_usd": 4.23
+}
+EOF
+```
+
+### Step 6: Build the leaderboard
+
+```bash
+# Single run
+uv run attractorbench leaderboard jobs/opus46-tier1
+
+# Multiple runs — compare agents head-to-head
+uv run attractorbench leaderboard jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
+
+# Sort by cost efficiency instead of score
+uv run attractorbench leaderboard jobs/* --sort cost
+
+# Export as markdown for a report
+uv run attractorbench leaderboard jobs/* --markdown
+
+# Export as JSON for programmatic use
+uv run attractorbench leaderboard jobs/* --json
+```
+
+Leaderboard columns: Agent, Model, Label, Tasks, Score, Tokens, Time, Tool Calls, Cost, Tokens/Point, $/Point.
+
+## Comparing Agents
+
 ### Head-to-Head (Tier 1)
+
+Run the same tier across multiple agents, then compare on the leaderboard.
 
 ```bash
 # Generate once
@@ -116,7 +233,10 @@ harbor run --dataset ./tasks/tier1-unified-llm --agent codex \
 harbor run --dataset ./tasks/tier1-unified-llm --agent gemini-cli \
   --model google/gemini-3.1 --job-name gemini31-t1
 
-# Compare
+# Score + compare
+uv run attractorbench leaderboard jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
+
+# Detailed per-task comparison
 uv run attractorbench compare jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
 ```
 
@@ -134,6 +254,7 @@ harbor run \
   --job-name opus46-full
 
 uv run attractorbench score jobs/opus46-full
+uv run attractorbench leaderboard jobs/opus46-full
 ```
 
 ## Understanding Your Scores
@@ -141,10 +262,10 @@ uv run attractorbench score jobs/opus46-full
 ### Composite Score
 
 ```
-composite = 0.10 * build_success + 0.20 * self_test_pass_rate + 0.70 * conformance_pass_rate
+composite = 0.10 * build_success + 0.10 * self_test_pass_rate + 0.80 * conformance_pass_rate
 ```
 
-The composite score ranges from 0.0 to 1.0. The weighting reflects what matters: conformance with the spec is 70% of the score, the agent's own test suite is 20%, and simply building is 10%.
+The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (80%) — the spec-following tests we control. Self-test credit (10%) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile scores at most 10%.
 
 ### Score Interpretation (Tier 1)
 
@@ -152,12 +273,23 @@ The composite score ranges from 0.0 to 1.0. The weighting reflects what matters:
 |-----------|---------------|
 | 0.00 | Agent couldn't build anything, or binary doesn't exist |
 | 0.10 | Built successfully but failed all conformance tests |
-| 0.30 | Got `client-from-env` and maybe `list-models` working |
-| 0.50 | Core completions work, some streaming or tool calling |
-| 0.70 | Most conformance tests pass, possibly missing edge cases |
-| 0.90+ | Near-complete spec compliance — impressive |
+| 0.25 | Got `client-from-env` and maybe `list-models` working |
+| 0.40 | Core completions work, basic schema validation passes |
+| 0.55 | Streaming, tool calling, and provider routing work |
+| 0.70 | Most conformance tests pass, mock server actually called |
+| 0.85+ | Near-complete spec compliance — impressive |
 
 **A score of 0.3-0.4 on Tier 1 is respectable.** Implementing a multi-provider LLM SDK from a 2,000-line spec in 30 minutes is genuinely hard.
+
+### Coverage Honesty
+
+Conformance tests sample approximately 30-35% of DoD items across tiers. The following spec sections remain untestable via CLI conformance and are not covered:
+
+- **Tier 1:** Reasoning tokens, prompt caching, parity matrices (internal implementation details)
+- **Tier 2:** Tool output truncation, reasoning effort tuning, subagent orchestration (require runtime inspection)
+- **Tier 3:** Human-in-the-loop gates, model stylesheets, node transforms (require interactive or visual verification)
+
+Scores reflect tested behavior only. An agent scoring 0.85 has demonstrated strong compliance on the testable surface, but may still have gaps in untested areas.
 
 ### Per-Section DoD Scores
 
@@ -185,28 +317,35 @@ If your Harbor setup captures token counts and costs (via ATIF trajectories), at
 
 Each tier's spec is a complete NLSpec document from the Attractor project:
 
-### Tier 0: Smoke Test (4 conformance tests)
-Minimal plumbing validation. Tests: build, client-from-env, list-models, complete.
+### Tier 0: Smoke Test (6 conformance tests)
+Minimal plumbing validation. Tests: build, client-from-env, list-models, complete, missing-key error, schema check.
 
-### Tier 1: Unified LLM SDK (10 conformance tests across 5 sections)
-- **Core Infrastructure** — Client construction, model listing, binary existence
-- **Generation** — Blocking completions, streaming, structured output
-- **Tool Calling** — Tool definitions and execution
-- **Provider Adapters** — Anthropic adapter (cross-provider parity)
-- **Message & Content Model** — Multimodal message handling
-- **Error Handling** — Graceful error surfacing
+### Tier 1: Unified LLM SDK (28 conformance tests across 6 sections)
+- **Core Infrastructure** — Client construction, model listing, provider routing, missing-key errors
+- **Generation** — Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
+- **Tool Calling** — Tool definitions, name matching, argument validation
+- **Provider Adapters** — OpenAI, Anthropic, and Gemini routing; cross-provider tool calls and streaming
+- **Message & Content Model** — Text-only, multimodal, and tool-result-roundtrip messages
+- **Error Handling** — Invalid requests, rate limits, auth errors
 
-### Tier 2: Coding Agent Loop (6 conformance tests across 5 sections)
-- **Core Loop** — Session creation, agentic processing
-- **Tool Execution** — Tool dispatch and routing
-- **Event System** — Typed event emission
-- **Steering** — Mid-session instruction injection
+### Tier 2: Coding Agent Loop (20 conformance tests across 7 sections)
+- **Core Loop** — Session creation with ID fields, agentic processing with LLM calls, natural completion
+- **Tool Execution** — Tool dispatch with result fields, unknown tools, malformed args, shell and file tools
+- **Event System** — Typed events, lifecycle markers, minimum count
+- **Steering** — Mid-session injection with acknowledgment
+- **System Prompts** — System message presence in mock requests
+- **Error Handling** — Graceful connection failure
+- **Execution Environment** — Shell commands and file operations
 
-### Tier 3: Attractor Pipeline (11 conformance tests across 6 sections)
-- **DOT Parsing** — Simple, attributed, and conditional graphs
-- **Validation** — Missing start nodes, orphan detection, valid graph acceptance
-- **Execution Engine** — Linear, conditional, and goal-gated pipelines
-- **Node Handlers** — Handler type registry
+### Tier 3: Attractor Pipeline (28 conformance tests across 8 sections)
+- **DOT Parsing** — Simple, attributed, conditional, chained, commented, subgraph, and default-inherited graphs
+- **Validation** — Missing start/exit nodes, bad edge refs, orphan detection, missing prompts
+- **Execution Engine** — Linear, conditional, and goal-gated pipelines; status fields, terminal stopping, branch selection
+- **Goal Gate** — Goal gate enforcement and failure handling
+- **Node Handlers** — Handler type registry with required types
+- **Retry Logic** — Max retries enforcement
+- **State/Context** — Execution context and trace
+- **Condition Expressions** — Parsed condition attributes
 
 ## Harbor Registry
 
@@ -245,8 +384,17 @@ uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
 # Score a completed job
 uv run attractorbench score jobs/<job-name>
 
-# Compare multiple jobs
+# Compare multiple jobs (per-task detail)
 uv run attractorbench compare jobs/run-a jobs/run-b jobs/run-c
+
+# Leaderboard — rank agent+model combos with efficiency metrics
+uv run attractorbench leaderboard jobs/run-a jobs/run-b jobs/run-c
+uv run attractorbench leaderboard jobs/* --sort cost      # sort by cost (ascending)
+uv run attractorbench leaderboard jobs/* --sort tokens    # sort by token usage
+uv run attractorbench leaderboard jobs/* --sort time      # sort by wall time
+uv run attractorbench leaderboard jobs/* --sort efficiency # sort by tokens/point
+uv run attractorbench leaderboard jobs/* --markdown       # markdown table output
+uv run attractorbench leaderboard jobs/* --json           # JSON output
 
 # View DoD checklists
 uv run attractorbench checklist           # all tiers

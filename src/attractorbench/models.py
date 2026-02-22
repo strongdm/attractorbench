@@ -1,0 +1,48 @@
+"""Pydantic models for attractorbench leaderboard data."""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+
+class RunMetadata(BaseModel):
+    """Run-level metadata — source TBD (sidecar file, Harbor API, etc.)."""
+
+    agent: str  # e.g. "claude-code", "aider"
+    model: str  # e.g. "claude-opus-4-6", "gpt-4o"
+    label: str = ""  # optional disambiguator
+    total_tokens: int | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    tool_calls: int | None = None
+    wall_seconds: float | None = None
+    cost_usd: float | None = None
+
+
+class LeaderboardEntry(BaseModel):
+    """One row on the leaderboard — an agent+model run across task(s)."""
+
+    agent: str
+    model: str
+    label: str = ""
+    # Score metrics (from reward.json)
+    tasks_attempted: int
+    build_rate: float
+    avg_self_test: float
+    avg_conformance: float
+    avg_composite: float
+    # Efficiency metrics (nullable — source TBD)
+    total_tokens: int | None = None
+    wall_seconds: float | None = None
+    tool_calls: int | None = None
+    cost_usd: float | None = None
+    # Derived (computed if inputs available)
+    tokens_per_point: float | None = None  # total_tokens / avg_composite
+    cost_per_point: float | None = None  # cost_usd / avg_composite
+
+
+class Leaderboard(BaseModel):
+    """Full leaderboard state."""
+
+    generated_at: str  # ISO timestamp
+    entries: list[LeaderboardEntry]
