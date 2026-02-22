@@ -5,6 +5,14 @@
   "homepage": "https://github.com/strongdm/attractorbench",
   "tasks": [
     {
+      "id": "tier0-smoke-test",
+      "name": "Smoke Test",
+      "description": "Minimal plumbing check: build, mock server, conformance CLI, scoring",
+      "difficulty": "easy",
+      "category": "programming",
+      "tags": ["nlspec", "attractor", "smoke-test", "plumbing"]
+    },
+    {
       "id": "tier1-unified-llm",
       "name": "Unified LLM SDK",
       "description": "Implement a multi-provider LLM client library from an NLSpec",

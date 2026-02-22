@@ -64,6 +64,77 @@ def check_binary_exists():
 
 
 # ==========================
+# Tier 0: Smoke Test
+# ==========================
+
+def tier0_tests():
+    tests = []
+
+    # Build check
+    t = ConformanceTest("build_check", "plumbing", "make build succeeds")
+    start = time.time()
+    code, out, err = run_cmd(["make", "build"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500]
+    tests.append(t)
+
+    if not check_binary_exists():
+        t = ConformanceTest("binary_exists", "plumbing", "./bin/conformance exists and is executable")
+        t.error = "Binary not found at ./bin/conformance"
+        tests.append(t)
+        return tests
+
+    # client-from-env
+    t = ConformanceTest("client_from_env", "plumbing", "client-from-env reads OPENAI_API_KEY")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "client-from-env"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500]
+    tests.append(t)
+
+    # list-models
+    t = ConformanceTest("list_models", "plumbing", "list-models returns JSON from mock server")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "list-models"])
+    t.duration = time.time() - start
+    try:
+        data = json.loads(out)
+        t.passed = code == 0 and isinstance(data, (dict, list))
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = f"Invalid JSON: {out[:200]}"
+    if not t.passed and not t.error and code != 0:
+        t.error = err[:500]
+    tests.append(t)
+
+    # complete
+    simple_request = json.dumps({
+        "model": "gpt-4o",
+        "messages": [{"role": "user", "content": "Say hello"}],
+    })
+
+    t = ConformanceTest("complete_request", "plumbing", "complete sends request and returns JSON")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "complete"], stdin_data=simple_request)
+    t.duration = time.time() - start
+    try:
+        resp = json.loads(out)
+        t.passed = code == 0 and isinstance(resp, dict) and len(resp) > 0
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = f"Invalid JSON: {out[:200]}"
+    if not t.passed and not t.error and code != 0:
+        t.error = err[:500]
+    tests.append(t)
+
+    return tests
+
+
+# ==========================
 # Tier 1: Unified LLM SDK
 # ==========================
 
@@ -648,7 +719,7 @@ def main():
     parser.add_argument("--tier", type=int, required=True)
     args = parser.parse_args()
 
-    tier_runners = {1: tier1_tests, 2: tier2_tests, 3: tier3_tests}
+    tier_runners = {0: tier0_tests, 1: tier1_tests, 2: tier2_tests, 3: tier3_tests}
     runner = tier_runners.get(args.tier)
     if not runner:
         print(f"Unknown tier: {args.tier}", file=sys.stderr)

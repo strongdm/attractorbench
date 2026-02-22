@@ -151,6 +151,15 @@ def _load_tier(tier_def: TierDef) -> TierDef:
 
 TIER_DEFS: list[TierDef] = [
     TierDef(
+        tier=0,
+        name="Smoke Test",
+        slug="tier0-smoke-test",
+        spec_file="smoke-test-spec.md",
+        dod_section_number="0",
+        agent_timeout=300,
+        verifier_timeout=120,
+    ),
+    TierDef(
         tier=1,
         name="Unified LLM SDK",
         slug="tier1-unified-llm",

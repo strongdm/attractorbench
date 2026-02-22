@@ -11,7 +11,7 @@ from attractorbench.tiers import load_tiers
 class TierLoadingTests(unittest.TestCase):
     def test_load_tiers_default_returns_all_tiers(self) -> None:
         tiers = load_tiers()
-        self.assertEqual([1, 2, 3], [tier.tier for tier in tiers])
+        self.assertEqual([0, 1, 2, 3], [tier.tier for tier in tiers])
         self.assertTrue(all(tier.total_items > 0 for tier in tiers))
 
     def test_load_tiers_rejects_unknown_tiers(self) -> None:
