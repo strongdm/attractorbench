@@ -50,6 +50,8 @@ uv sync   # installs all dependencies into a local .venv
 
 ### 2. Generate task directories
 
+The conformance tests, mock server, and scoring harness are generated locally from `src/attractorbench/adapter.py` — they are not checked into the repo to avoid eval contamination. You must run this step before using Harbor.
+
 ```bash
 # Recommended first run: just Tier 0 to validate plumbing
 uv run attractorbench generate --tiers 0 --output-dir tasks
@@ -220,15 +222,18 @@ To use a local checkout instead:
 harbor run --dataset ./tasks --agent claude-code --model anthropic/claude-opus-4-6
 ```
 
-## Reproducibility
+## Reproducibility and Eval Contamination
 
 The mock LLM server returns deterministic canned responses. Two runs of the same agent should produce near-identical conformance scores — any variance comes from agent non-determinism (temperature, tool-use ordering).
+
+**On contamination:** The NLSpec source files (`specs/`) are intentionally public — the benchmark measures whether an agent can follow a real spec, and having seen the spec in training is analogous to a developer reading the design doc before starting. The conformance tests, mock server, and scoring harness are generated locally (not checked into the repo) so they stay out of training data. For leaderboard evaluations, the generator in `adapter.py` makes it straightforward to produce fresh conformance variants with different mock responses or test subsets.
 
 For published results, we recommend:
 
 - **n_attempts: 3** with mean and standard deviation reporting
 - Pin the agent version (e.g., `claude-code@1.0.20`)
 - Record the Harbor version and environment type
+- Note the model's training data cutoff relative to the benchmark version
 - Export ATIF trajectories for full reproducibility: `harbor traces export <job>`
 
 ## CLI Reference

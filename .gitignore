@@ -5,3 +5,10 @@ __pycache__/
 dist/
 *.egg-info/
 .ruff_cache/
+.pytest_cache/
+
+# Generated task internals — kept out of public repo to avoid eval contamination.
+# The generator in src/attractorbench/adapter.py is the source of truth.
+# Run `uv run attractorbench generate` to produce these locally.
+tasks/*/tests/
+tasks/*/solution/
