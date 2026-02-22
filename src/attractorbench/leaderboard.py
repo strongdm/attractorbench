@@ -11,7 +11,7 @@ from litellm import model_cost
 from rich.console import Console
 from rich.table import Table
 
-from attractorbench.models import Leaderboard, LeaderboardEntry, RunMetadata
+from attractorbench.models import Leaderboard, LeaderboardEntry, RunLogEntry, RunMetadata
 from attractorbench.scoring import RewardData, load_job_results
 
 logger = logging.getLogger(__name__)
@@ -428,5 +428,107 @@ def render_markdown(leaderboard: Leaderboard) -> str:
             f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "
             f"| {fmt_ratio(e.tokens_per_point, 'tokens')} "
             f"| {fmt_ratio(e.cost_per_point, 'cost')} |"
+        )
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Run log
+# ---------------------------------------------------------------------------
+
+
+def _extract_job_date(job_dir: Path) -> str:
+    """Extract ISO date from the first trial's started_at timestamp."""
+    for child in sorted(job_dir.iterdir()) if job_dir.is_dir() else []:
+        rj = child / "result.json"
+        if child.is_dir() and rj.is_file():
+            try:
+                data = json.loads(rj.read_text(encoding="utf-8"))
+                started = (data.get("agent_execution") or {}).get("started_at")
+                if started:
+                    return _parse_iso(started).date().isoformat()
+            except (json.JSONDecodeError, OSError, ValueError):
+                pass
+    return ""
+
+
+def build_run_log(job_dirs: list[Path]) -> list[RunLogEntry]:
+    """Build a run log — one entry per job directory."""
+    entries: list[RunLogEntry] = []
+
+    for job_dir in job_dirs:
+        results = load_job_results(job_dir)
+        if not results:
+            logger.debug("No reward.json files found in %s, skipping", job_dir)
+            continue
+
+        metadata = load_run_metadata(job_dir)
+        rewards = list(results.values())
+        count = len(rewards)
+        avg_composite = sum(r.composite_score for r in rewards) / count
+
+        entries.append(
+            RunLogEntry(
+                job_name=job_dir.name,
+                agent=metadata.agent if metadata else job_dir.name,
+                model=metadata.model if metadata else "",
+                tasks=count,
+                avg_composite=avg_composite,
+                total_tokens=metadata.total_tokens if metadata else None,
+                wall_seconds=metadata.wall_seconds if metadata else None,
+                tool_calls=metadata.tool_calls if metadata else None,
+                cost_usd=metadata.cost_usd if metadata else None,
+                date=_extract_job_date(job_dir),
+            )
+        )
+
+    return entries
+
+
+def render_run_log_table(entries: list[RunLogEntry], console: Console) -> None:
+    """Render the run log as a Rich table."""
+    table = Table(title="Run Log")
+    table.add_column("Run", style="bold")
+    table.add_column("Agent")
+    table.add_column("Model")
+    table.add_column("Tasks", justify="right")
+    table.add_column("Score", justify="right", style="bold")
+    table.add_column("Tokens", justify="right")
+    table.add_column("Time", justify="right")
+    table.add_column("Tool Calls", justify="right")
+    table.add_column("Cost", justify="right")
+    table.add_column("Date")
+
+    for e in entries:
+        table.add_row(
+            e.job_name,
+            e.agent,
+            e.model,
+            str(e.tasks),
+            f"{e.avg_composite:.3f}",
+            fmt_tokens(e.total_tokens),
+            fmt_time(e.wall_seconds),
+            str(e.tool_calls) if e.tool_calls is not None else "—",
+            fmt_cost(e.cost_usd),
+            e.date or "—",
+        )
+
+    console.print(table)
+
+
+def render_run_log_markdown(entries: list[RunLogEntry]) -> str:
+    """Render the run log as a markdown table string."""
+    lines = [
+        "| Run | Agent | Model | Tasks | Score | Tokens | Time | Tool Calls | Cost | Date |",
+        "|-----|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|------|",
+    ]
+    for e in entries:
+        tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
+        lines.append(
+            f"| {e.job_name} | {e.agent} | {e.model} "
+            f"| {e.tasks} | {e.avg_composite:.3f} "
+            f"| {fmt_tokens(e.total_tokens)} | {fmt_time(e.wall_seconds)} "
+            f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "
+            f"| {e.date or '—'} |"
         )
     return "\n".join(lines)

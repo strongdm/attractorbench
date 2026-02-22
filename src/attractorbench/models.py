@@ -41,6 +41,21 @@ class LeaderboardEntry(BaseModel):
     cost_per_point: float | None = None  # cost_usd / avg_composite
 
 
+class RunLogEntry(BaseModel):
+    """One row in the run log — a single job directory's totals."""
+
+    job_name: str  # directory name, e.g. "gemini31-full"
+    agent: str
+    model: str
+    tasks: int
+    avg_composite: float
+    total_tokens: int | None = None
+    wall_seconds: float | None = None
+    tool_calls: int | None = None
+    cost_usd: float | None = None
+    date: str = ""  # ISO date, extracted from first trial's started_at
+
+
 class Leaderboard(BaseModel):
     """Full leaderboard state."""
 

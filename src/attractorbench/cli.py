@@ -230,6 +230,41 @@ def leaderboard(
 
 
 @app.command()
+def run_log(
+    job_dirs: Annotated[list[Path], typer.Argument(help="Paths to Harbor job directories")],
+    markdown: Annotated[bool, typer.Option("--markdown", help="Output markdown table")] = False,
+    json_output: Annotated[bool, typer.Option("--json", help="Output JSON")] = False,
+) -> None:
+    """Log of individual benchmark runs with per-job totals."""
+    import json
+
+    from attractorbench.leaderboard import (
+        build_run_log,
+        render_run_log_markdown,
+        render_run_log_table,
+    )
+
+    missing = [p for p in job_dirs if not p.exists() or not p.is_dir()]
+    if missing:
+        for p in missing:
+            console.print(f"[red]Job directory not found: {p}[/red]")
+        raise typer.Exit(1)
+
+    entries = build_run_log(job_dirs)
+
+    if not entries:
+        console.print("[red]No results found in any job directory[/red]")
+        raise typer.Exit(1)
+
+    if json_output:
+        console.print(json.dumps([e.model_dump() for e in entries], indent=2))
+    elif markdown:
+        console.print(render_run_log_markdown(entries))
+    else:
+        render_run_log_table(entries, console)
+
+
+@app.command()
 def checklist(
     tier: Annotated[Optional[int], typer.Option(help="Tier number (1, 2, or 3)")] = None,
 ) -> None:
