@@ -140,7 +140,7 @@ class AdapterGenerationTests(unittest.TestCase):
     def test_docker_compose_has_healthcheck(self) -> None:
         compose = generate_docker_compose()
         self.assertIn("healthcheck:", compose)
-        self.assertIn("http://localhost:4000/health", compose)
+        self.assertIn("localhost:4000/health", compose)
 
     def test_docker_compose_has_volume_mount(self) -> None:
         compose = generate_docker_compose()
@@ -194,9 +194,11 @@ class AdapterGenerationTests(unittest.TestCase):
         self.assertIn("allow_internet = true", toml)
         self.assertNotIn("allow_internet = false", toml)
 
-    def test_dockerfile_copies_harvest_script(self) -> None:
+    def test_dockerfile_has_tests_dir(self) -> None:
         dockerfile = generate_dockerfile(self.tier)
-        self.assertIn("COPY tests/harvest_litellm.py /tests/harvest_litellm.py", dockerfile)
+        self.assertIn("/tests", dockerfile)
+        # Harbor uploads tests at verify time — no COPY needed
+        self.assertNotIn("COPY tests/", dockerfile)
 
 
 if __name__ == "__main__":

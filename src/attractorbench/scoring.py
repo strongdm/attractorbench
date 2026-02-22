@@ -24,7 +24,12 @@ class RewardData:
 
     @classmethod
     def from_file(cls, path: Path) -> RewardData:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # Prefer reward_details.json (full breakdown) over reward.json (Harbor single-key)
+        details_path = path.parent / "reward_details.json"
+        if details_path.exists():
+            data = json.loads(details_path.read_text(encoding="utf-8"))
+        else:
+            data = json.loads(path.read_text(encoding="utf-8"))
         dod = {k: v for k, v in data.items() if k.startswith("dod_")}
         return cls(
             build_success=data.get("build_success", 0),

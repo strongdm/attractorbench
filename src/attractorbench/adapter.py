@@ -153,16 +153,9 @@ RUN curl -fsSL https://go.dev/dl/go1.23.6.linux-amd64.tar.gz | tar -C /usr/local
 ENV PATH="/usr/local/go/bin:${{PATH}}"
 
 RUN mkdir -p /workspace /logs /logs/verifier /logs/agent /logs/artifacts /tests
-RUN chmod -R 777 /workspace /logs
+RUN chmod -R 777 /workspace /logs /tests
 
 WORKDIR /workspace
-
-# Copy mock server into the image
-COPY tests/mock_server.py /tests/mock_server.py
-COPY tests/conformance/ /tests/conformance/
-COPY tests/test.sh /tests/test.sh
-COPY tests/score.py /tests/score.py
-COPY tests/harvest_litellm.py /tests/harvest_litellm.py
 """
 
 
@@ -622,7 +615,7 @@ def main():
         + 0.80 * conf_pass_rate
     )
 
-    reward = {
+    details = {
         "build_success": build_success,
         "self_test_pass_rate": round(self_test_pass_rate, 4),
         "self_test_count": self_total,
@@ -635,8 +628,15 @@ def main():
         "composite_score": round(composite, 4),
     }
 
+    # Harbor expects reward.json with exactly one key
+    reward = {"composite_score": round(composite, 4)}
     Path(args.output).write_text(json.dumps(reward, indent=2))
-    print(json.dumps(reward, indent=2), file=sys.stderr)
+
+    # Write detailed breakdown to a separate file for attractorbench scoring
+    details_path = Path(args.output).parent / "reward_details.json"
+    details_path.write_text(json.dumps(details, indent=2))
+
+    print(json.dumps(details, indent=2), file=sys.stderr)
 
 
 if __name__ == "__main__":
@@ -2681,10 +2681,11 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-    command: >
-      sh -c 'litellm --config /app/config.yaml --json_logs 2>&1 | tee /logs/litellm/proxy.log'
+    entrypoint: ["sh", "-c"]
+    command:
+      - "litellm --config /app/config.yaml --port 4000 2>&1 | tee /logs/litellm/proxy.log"
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:4000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=2)"]
       interval: 3s
       timeout: 5s
       retries: 20
