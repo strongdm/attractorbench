@@ -165,7 +165,7 @@ TIER_DEFS: list[TierDef] = [
         slug="tier1-unified-llm",
         spec_file="unified-llm-spec.md",
         dod_section_number="8",
-        agent_timeout=1800,
+        agent_timeout=7200,
         verifier_timeout=600,
     ),
     TierDef(
@@ -174,7 +174,7 @@ TIER_DEFS: list[TierDef] = [
         slug="tier2-agent-loop",
         spec_file="coding-agent-loop-spec.md",
         dod_section_number="9",
-        agent_timeout=3600,
+        agent_timeout=7200,
         verifier_timeout=600,
     ),
     TierDef(
@@ -183,7 +183,7 @@ TIER_DEFS: list[TierDef] = [
         slug="tier3-attractor",
         spec_file="attractor-spec.md",
         dod_section_number="11",
-        agent_timeout=3600,
+        agent_timeout=7200,
         verifier_timeout=600,
     ),
 ]

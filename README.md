@@ -21,9 +21,9 @@ Key properties:
 | Tier | Name | Spec Lines | Conformance Tests | DoD Items | Coverage | Agent Timeout | Difficulty |
 |------|------|-----------|-------------------|-----------|----------|---------------|------------|
 | 0 | Smoke Test | ~30 | 6 | 6 | 100% | 5 min | Easy |
-| 1 | Unified LLM SDK | ~2,150 | 28 | 78 | 36% | 30 min | Hard |
-| 2 | Coding Agent Loop | ~1,450 | 20 | 71 | 28% | 60 min | Hard |
-| 3 | Attractor Pipeline | ~2,080 | 28 | 89 | 31% | 60 min | Hard |
+| 1 | Unified LLM SDK | ~2,150 | 28 | 78 | 36% | 2 hours | Hard |
+| 2 | Coding Agent Loop | ~1,450 | 20 | 71 | 28% | 2 hours | Hard |
+| 3 | Attractor Pipeline | ~2,080 | 28 | 89 | 31% | 2 hours | Hard |
 
 **Tier 0** validates plumbing — your Harbor integration, the mock server, and the scoring pipeline all work before you spend 30 minutes on a real run.
 
@@ -33,16 +33,15 @@ Key properties:
 
 ## Leaderboard
 
-Results from initial benchmark runs (2026-02-22). Single attempt per tier, Docker environment.
+See **[LEADERBOARD.md](LEADERBOARD.md)** for full results with per-tier breakdowns, token counts, cost, and efficiency metrics.
 
-| Agent | Model | Tier | Build | Self-Test | Conformance | Composite |
-|-------|-------|------|-------|-----------|-------------|-----------|
-| claude-code | claude-sonnet-4-6 | 0 — Smoke Test | pass | 100% | 6/6 (100%) | **1.000** |
-| claude-code | claude-sonnet-4-6 | 1 — Unified LLM SDK | pass | 97.6% | 22/28 (78.6%) | **0.826** |
-| claude-code | claude-sonnet-4-6 | 2 — Agent Loop | pass | 100% | 12/19 (63.2%) | **0.705** |
-| claude-code | claude-sonnet-4-6 | 3 — Attractor Pipeline | pass | 100% | 0/0 (0%) | **0.200** |
+Summary from initial runs (Sonnet 4.6, Docker environment):
 
-Sonnet 4.6 builds reliably across all tiers and writes strong self-tests. Conformance drops with spec complexity — Tier 1 (78.6%) and Tier 2 (63.2%) show solid spec-following, while Tier 3 built and self-tested but didn't wire up the conformance CLI.
+| Agent | Model | Tasks | Score | Tokens | Time | Cost | $/Pt |
+|-------|-------|------:|------:|-------:|-----:|-----:|-----:|
+| claude-code | claude-sonnet-4-6 | 3 | 0.577 | 23.9M | 53m51s | $9.19 | $15.92 |
+
+Sonnet 4.6 builds reliably across all tiers and writes strong self-tests. Conformance drops with spec complexity. See LEADERBOARD.md for the full breakdown.
 
 ## Quick Start
 
@@ -76,199 +75,134 @@ uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
 ### 3. Run with Harbor
 
 ```bash
-# Smoke test — validates the whole pipeline in ~5 minutes
+# Smoke test first — validates the whole pipeline in ~5 minutes
 harbor run \
   --dataset ./tasks/tier0-smoke-test \
   --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
+  --model anthropic/claude-sonnet-4-6 \
   --env docker
 
-# Tier 1 — the main event (~30 min per agent)
+# Full eval — all tiers, 2-hour timeout per tier
 harbor run \
-  --dataset ./tasks/tier1-unified-llm \
+  --dataset ./tasks \
   --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
+  --model anthropic/claude-sonnet-4-6 \
   --env docker \
-  --job-name opus46-tier1
+  --job-name sonnet46-full
 ```
 
-### 4. Score results
+### 4. Score and view results
 
 ```bash
-uv run attractorbench score jobs/opus46-tier1
+uv run attractorbench score jobs/sonnet46-full
+uv run attractorbench leaderboard jobs/sonnet46-full
 ```
 
-## Running an Eval: Step-by-Step
+## Running Evals
 
-This is the complete procedure for benchmarking one agent+model combination.
+### Overview
+
+Each eval run follows four steps: **generate** tasks, **run** with Harbor, **score** results, **view** leaderboard. The leaderboard automatically extracts tokens, wall time, tool calls, and cost from Harbor's output files — no manual metadata needed.
 
 ### Agent/Model Mapping
-
-Pick your agent harness and model. Each agent has a Harbor adapter that handles prompt formatting, tool routing, and context management.
 
 | Model | Harbor Agent | Notes |
 |-------|-------------|-------|
 | Claude Opus 4.6 | `claude-code` | ATIF trajectory support. Strong long-context spec reading. |
+| Claude Sonnet 4.6 | `claude-code` | Faster, cheaper. Good baseline. |
 | GPT-5.3 Codex | `codex` | OpenAI's agentic coding agent. |
 | GPT-5.2 | `opencode` | Community agent wrapper for OpenAI models. |
 | Gemini 3.1 | `gemini-cli` | Google's native CLI. Long context window advantages. |
-| Any model | `openhands` | Model-agnostic agent framework — test different models through the same agent architecture. |
+| Any model | `openhands` | Model-agnostic agent framework. |
 | Any model | `aider` | Git-oriented agent — interesting contrast in approach. |
 
-### Step 1: Generate tasks
-
-Generate once per benchmark version. Regenerate if you update `adapter.py` or the specs.
+### Running a Single Agent
 
 ```bash
-# Tier 0 first to validate plumbing
-uv run attractorbench generate --tiers 0 --output-dir tasks
-
-# Then generate the tier(s) you want to eval
-uv run attractorbench generate --tiers 1 --output-dir tasks
-
-# Or everything at once
+# 1. Generate tasks (once per benchmark version)
 uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
-```
 
-### Step 2: Run the smoke test
-
-Always run Tier 0 first. It validates your Harbor install, Docker environment, and the scoring pipeline in under 5 minutes. If Tier 0 fails, debug that before spending 30-60 minutes on a real tier.
-
-```bash
+# 2. Smoke test first (always)
 harbor run \
   --dataset ./tasks/tier0-smoke-test \
   --agent claude-code \
   --model anthropic/claude-opus-4-6 \
   --env docker
 
-# Verify it scored correctly
-uv run attractorbench score jobs/<tier0-job-name>
-```
-
-### Step 3: Run the real eval
-
-```bash
-# Single tier (recommended starting point)
+# 3. Full eval — all tiers at once
 harbor run \
-  --dataset ./tasks/tier1-unified-llm \
+  --dataset ./tasks \
   --agent claude-code \
   --model anthropic/claude-opus-4-6 \
   --env docker \
-  --job-name opus46-tier1
-
-# All tiers in parallel
-harbor run \
-  --dataset ./tasks \
-  --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
-  --env daytona \
-  --n-concurrent 4 \
-  --job-name opus46-full
-```
-
-### Step 4: Score
-
-```bash
-uv run attractorbench score jobs/opus46-tier1
-```
-
-This reads `reward.json` from the job directory and prints per-task and summary scores.
-
-### Step 5: Efficiency metrics (automatic via LiteLLM sidecar)
-
-Every generated task includes a **LiteLLM proxy sidecar** that automatically intercepts the agent's real LLM API calls during the agent phase, logs token usage and cost, and writes `metadata.json` for the leaderboard.
-
-**How it works:**
-
-1. Harbor starts `docker-compose.yaml` which includes a `litellm` sidecar service alongside the `main` container.
-2. The `main` container's `OPENAI_BASE_URL` and `ANTHROPIC_BASE_URL` environment variables point to the LiteLLM proxy (`http://litellm:4000/...`).
-3. The proxy forwards all requests to the real provider APIs while logging usage to a shared volume.
-4. During the verifier phase, `harvest_litellm.py` reads the proxy log and writes `/logs/verifier/metadata.json`.
-5. The leaderboard picks up the metadata automatically.
-
-**API keys:** The LiteLLM sidecar reads API keys from the host environment via docker-compose variable substitution (`${OPENAI_API_KEY:-}`, `${ANTHROPIC_API_KEY:-}`, `${GEMINI_API_KEY:-}`). Make sure your keys are set in the environment where Harbor starts the compose.
-
-**Troubleshooting:** If the litellm sidecar fails to start, check that your API keys are set and that the `ghcr.io/berriai/litellm:main-latest` image can be pulled. The harvest step is non-fatal — if it fails, the leaderboard still works (efficiency columns show `—`).
-
-You can also manually provide or override `metadata.json` if needed:
-
-```bash
-cat > jobs/opus46-tier1/metadata.json << 'EOF'
-{
-  "agent": "claude-code",
-  "model": "claude-opus-4-6",
-  "total_tokens": 145200,
-  "prompt_tokens": 98000,
-  "completion_tokens": 47200,
-  "cost_usd": 4.23
-}
-EOF
-```
-
-### Step 6: Build the leaderboard
-
-```bash
-# Single run
-uv run attractorbench leaderboard jobs/opus46-tier1
-
-# Multiple runs — compare agents head-to-head
-uv run attractorbench leaderboard jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
-
-# Sort by cost efficiency instead of score
-uv run attractorbench leaderboard jobs/* --sort cost
-
-# Export as markdown for a report
-uv run attractorbench leaderboard jobs/* --markdown
-
-# Export as JSON for programmatic use
-uv run attractorbench leaderboard jobs/* --json
-```
-
-Leaderboard columns: Agent, Model, Label, Tasks, Score, Tokens, Time, Tool Calls, Cost, Tokens/Point, $/Point.
-
-## Comparing Agents
-
-### Head-to-Head (Tier 1)
-
-Run the same tier across multiple agents, then compare on the leaderboard.
-
-```bash
-# Generate once
-uv run attractorbench generate --tiers 1 --output-dir tasks
-
-# Run each agent
-harbor run --dataset ./tasks/tier1-unified-llm --agent claude-code \
-  --model anthropic/claude-opus-4-6 --job-name opus46-t1
-
-harbor run --dataset ./tasks/tier1-unified-llm --agent codex \
-  --model openai/gpt-5.3 --job-name gpt53-codex-t1
-
-harbor run --dataset ./tasks/tier1-unified-llm --agent gemini-cli \
-  --model google/gemini-3.1 --job-name gemini31-t1
-
-# Score + compare
-uv run attractorbench leaderboard jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
-
-# Detailed per-task comparison
-uv run attractorbench compare jobs/opus46-t1 jobs/gpt53-codex-t1 jobs/gemini31-t1
-```
-
-### Full Suite (All Tiers)
-
-```bash
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
-
-harbor run \
-  --dataset ./tasks \
-  --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
-  --env daytona \
-  --n-concurrent 4 \
   --job-name opus46-full
 
+# 4. Score + leaderboard
 uv run attractorbench score jobs/opus46-full
 uv run attractorbench leaderboard jobs/opus46-full
 ```
+
+### Running Multiple Agents
+
+To compare agents head-to-head, run each against the same tasks and then combine on the leaderboard.
+
+```bash
+# Generate once
+uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+
+# Run each agent (these can run in parallel on separate machines)
+harbor run --dataset ./tasks --agent claude-code \
+  --model anthropic/claude-opus-4-6 --env docker --job-name opus46-full
+
+harbor run --dataset ./tasks --agent claude-code \
+  --model anthropic/claude-sonnet-4-6 --env docker --job-name sonnet46-full
+
+harbor run --dataset ./tasks --agent codex \
+  --model openai/gpt-5.3 --env docker --job-name gpt53-full
+
+harbor run --dataset ./tasks --agent gemini-cli \
+  --model google/gemini-3.1 --env docker --job-name gemini31-full
+
+# Compare all runs on a single leaderboard
+uv run attractorbench leaderboard jobs/opus46-full jobs/sonnet46-full \
+  jobs/gpt53-full jobs/gemini31-full
+
+# Or just glob all jobs
+uv run attractorbench leaderboard jobs/*
+
+# Sort by cost efficiency
+uv run attractorbench leaderboard jobs/* --sort cost
+
+# Per-task detail
+uv run attractorbench compare jobs/opus46-full jobs/sonnet46-full
+```
+
+### Running with Daytona (Cloud)
+
+For parallel execution across tiers, use a cloud environment:
+
+```bash
+harbor run \
+  --dataset ./tasks \
+  --agent claude-code \
+  --model anthropic/claude-opus-4-6 \
+  --env daytona \
+  --n-concurrent 4 \
+  --job-name opus46-full
+```
+
+### Efficiency Metrics
+
+The leaderboard automatically extracts efficiency metrics from Harbor's native output:
+
+- **Tokens** — from `result.json` per trial (`agent_result.n_input_tokens` + `n_output_tokens`)
+- **Time** — wall clock seconds from the agent execution phase
+- **Tool Calls** — counted from `agent/trajectory.json` steps (ATIF format)
+- **Cost** — computed from token counts using litellm pricing tables, including cache token discounts
+
+No extra configuration needed. If an agent produces ATIF trajectories (like `claude-code`), you get full cache-aware cost breakdowns. Otherwise, cost is estimated from result.json token counts.
+
+Leaderboard columns: Agent, Model, Label, Tasks, Score, Tokens, Time, Tool Calls, Cost, Tok/Pt, $/Pt.
 
 ## Understanding Your Scores
 
@@ -318,11 +252,10 @@ uv run attractorbench checklist --tier 1
 
 ### Cost Efficiency
 
-If your Harbor setup captures token counts and costs (via ATIF trajectories), attractorbench can compute derived metrics:
+The leaderboard computes two derived efficiency metrics:
 
-- **tokens_per_compliance** — Total tokens / composite score. Lower is more efficient.
-- **cost_per_compliance** — Total cost USD / composite score. The practical metric.
-- **compliance_efficiency** — Composite score / (cost * time). Best overall efficiency metric.
+- **Tok/Pt** (tokens per point) — Total tokens / composite score. Lower is more efficient.
+- **$/Pt** (cost per point) — Total cost USD / composite score. The practical metric.
 
 "Agent X scores 0.6 at $2.40/run; Agent Y scores 0.7 at $18/run" is a more useful comparison than raw scores alone.
 

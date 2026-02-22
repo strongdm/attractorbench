@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from litellm import model_cost
 from rich.console import Console
 from rich.table import Table
 
@@ -68,15 +69,189 @@ def fmt_ratio(value: float | None, kind: str = "tokens") -> str:
 # ---------------------------------------------------------------------------
 
 
-def load_run_metadata(job_dir: Path) -> RunMetadata | None:
-    """Attempt to load metadata.json sidecar from a job directory.
+def _resolve_model_name(raw: str) -> str:
+    """Strip provider prefix (e.g. 'anthropic/claude-sonnet-4-6' → 'claude-sonnet-4-6')."""
+    if "/" in raw:
+        return raw.split("/", 1)[1]
+    return raw
 
-    Searches common locations:
-    - job_dir/metadata.json
-    - job_dir/logs/verifier/metadata.json
 
-    Returns None (with a debug log) if not found.
+def _lookup_model_costs(model_name: str) -> dict | None:
+    """Look up litellm pricing for *model_name*, trying several key variants."""
+    candidates = [
+        model_name,                              # claude-sonnet-4-6
+        f"anthropic/{model_name}",               # anthropic/claude-sonnet-4-6
+        f"anthropic.{model_name}",               # anthropic.claude-sonnet-4-6
+    ]
+    for key in candidates:
+        if key in model_cost:
+            return model_cost[key]
+    return None
+
+
+def _compute_cost(
+    model_name: str,
+    *,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_creation_tokens: int | None = None,
+    cache_read_tokens: int | None = None,
+) -> float | None:
+    """Compute USD cost using litellm pricing tables.
+
+    Anthropic billing model:
+    - input_tokens includes cache reads; cache_creation is separate.
+    - regular_input = prompt_tokens - cache_read_tokens
+    - cost = regular * input_rate + creation * creation_rate
+             + reads * read_rate + output * output_rate
     """
+    costs = _lookup_model_costs(model_name)
+    if costs is None:
+        return None
+
+    input_rate = costs.get("input_cost_per_token", 0)
+    output_rate = costs.get("output_cost_per_token", 0)
+    creation_rate = costs.get("cache_creation_input_token_cost", input_rate)
+    read_rate = costs.get("cache_read_input_token_cost", input_rate)
+
+    cr = cache_read_tokens or 0
+    cc = cache_creation_tokens or 0
+    regular_input = max(0, prompt_tokens - cr)
+
+    return (
+        regular_input * input_rate
+        + cc * creation_rate
+        + cr * read_rate
+        + completion_tokens * output_rate
+    )
+
+
+def _parse_iso(ts: str) -> datetime:
+    """Parse an ISO 8601 timestamp, handling trailing Z."""
+    if ts.endswith("Z"):
+        ts = ts[:-1] + "+00:00"
+    return datetime.fromisoformat(ts)
+
+
+def load_harbor_metrics(job_dir: Path) -> RunMetadata | None:
+    """Extract metrics from Harbor result.json + trajectory.json per trial.
+
+    Scans trial subdirectories for result.json files produced by Harbor.
+    Aggregates tokens, wall time, tool calls, and cost across all trials.
+    Returns None if no trial result.json files are found.
+    """
+    trial_results: list[dict] = []
+
+    for child in sorted(job_dir.iterdir()) if job_dir.is_dir() else []:
+        rj = child / "result.json"
+        if child.is_dir() and rj.is_file():
+            try:
+                trial_results.append(json.loads(rj.read_text(encoding="utf-8")))
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.debug("Skipping unreadable %s: %s", rj, exc)
+
+    if not trial_results:
+        return None
+
+    # --- Derive agent / model from the first trial ---
+    first = trial_results[0]
+    agent_name = (
+        first.get("config", {}).get("agent", {}).get("name")
+        or first.get("agent_info", {}).get("name", "unknown")
+    )
+    raw_model = (
+        first.get("config", {}).get("agent", {}).get("model_name")
+        or first.get("agent_info", {}).get("model_info", {}).get("name", "")
+    )
+    display_model = _resolve_model_name(raw_model)
+
+    # --- Aggregate across trials ---
+    total_prompt = 0
+    total_completion = 0
+    total_cache_creation = 0
+    total_cache_read = 0
+    total_wall = 0.0
+    total_tool_calls = 0
+    has_any_tokens = False
+
+    for trial in trial_results:
+        trial_dir = job_dir / trial.get("trial_name", "")
+
+        # -- Tokens from result.json agent_result --
+        ar = trial.get("agent_result") or {}
+        n_input = ar.get("n_input_tokens")
+        n_output = ar.get("n_output_tokens")
+        n_cache = ar.get("n_cache_tokens")
+
+        if n_input is not None:
+            has_any_tokens = True
+            total_prompt += n_input
+            total_completion += n_output or 0
+
+        # -- Wall time from agent_execution phase --
+        ae = trial.get("agent_execution") or {}
+        ae_start = ae.get("started_at")
+        ae_end = ae.get("finished_at")
+        if ae_start and ae_end:
+            dt = (_parse_iso(ae_end) - _parse_iso(ae_start)).total_seconds()
+            total_wall += max(0.0, dt)
+
+        # -- Trajectory: cache breakdown + tool calls --
+        traj_path = trial_dir / "agent" / "trajectory.json"
+        if traj_path.is_file():
+            try:
+                traj = json.loads(traj_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                traj = {}
+
+            # Tool calls from steps
+            for step in traj.get("steps", []):
+                if "tool_calls" in step:
+                    total_tool_calls += len(step["tool_calls"])
+
+            # Cache breakdown from final_metrics
+            fm_extra = (traj.get("final_metrics") or {}).get("extra") or {}
+            cc = fm_extra.get("total_cache_creation_input_tokens")
+            cr = fm_extra.get("total_cache_read_input_tokens")
+            if cc is not None:
+                total_cache_creation += cc
+            if cr is not None:
+                total_cache_read += cr
+        elif n_cache is not None and has_any_tokens:
+            # No trajectory — treat n_cache_tokens as cache reads (conservative)
+            total_cache_read += n_cache
+
+    if not has_any_tokens:
+        # No token data at all — still return agent/model + wall time
+        return RunMetadata(
+            agent=agent_name,
+            model=display_model,
+            wall_seconds=total_wall if total_wall > 0 else None,
+        )
+
+    total_tokens = total_prompt + total_completion
+    cost = _compute_cost(
+        display_model,
+        prompt_tokens=total_prompt,
+        completion_tokens=total_completion,
+        cache_creation_tokens=total_cache_creation or None,
+        cache_read_tokens=total_cache_read or None,
+    )
+
+    return RunMetadata(
+        agent=agent_name,
+        model=display_model,
+        total_tokens=total_tokens,
+        prompt_tokens=total_prompt,
+        completion_tokens=total_completion,
+        tool_calls=total_tool_calls or None,
+        wall_seconds=total_wall if total_wall > 0 else None,
+        cost_usd=round(cost, 4) if cost is not None else None,
+    )
+
+
+def _load_metadata_json(job_dir: Path) -> RunMetadata | None:
+    """Load metadata.json sidecar (legacy path)."""
     candidates = [
         job_dir / "metadata.json",
         job_dir / "logs" / "verifier" / "metadata.json",
@@ -89,8 +264,25 @@ def load_run_metadata(job_dir: Path) -> RunMetadata | None:
             except (json.JSONDecodeError, Exception) as exc:
                 logger.debug("Failed to parse metadata at %s: %s", path, exc)
                 return None
+    return None
 
-    logger.debug("No metadata.json found in %s", job_dir)
+
+def load_run_metadata(job_dir: Path) -> RunMetadata | None:
+    """Load run metadata, preferring Harbor native files over metadata.json.
+
+    Resolution order:
+    1. Harbor result.json + trajectory.json per trial (richest data)
+    2. metadata.json sidecar (legacy / manually written)
+    """
+    harbor = load_harbor_metrics(job_dir)
+    if harbor is not None:
+        return harbor
+
+    meta = _load_metadata_json(job_dir)
+    if meta is not None:
+        return meta
+
+    logger.debug("No metadata found in %s", job_dir)
     return None
 
 
