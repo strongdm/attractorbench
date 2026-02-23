@@ -44,7 +44,7 @@ def _write_metadata(path: Path, **kwargs) -> None:
 
 class TestFmtTokens(unittest.TestCase):
     def test_none(self) -> None:
-        self.assertEqual("—", fmt_tokens(None))
+        self.assertEqual("-", fmt_tokens(None))
 
     def test_small(self) -> None:
         self.assertEqual("842", fmt_tokens(842))
@@ -61,7 +61,7 @@ class TestFmtTokens(unittest.TestCase):
 
 class TestFmtTime(unittest.TestCase):
     def test_none(self) -> None:
-        self.assertEqual("—", fmt_time(None))
+        self.assertEqual("-", fmt_time(None))
 
     def test_seconds(self) -> None:
         self.assertEqual("42s", fmt_time(42.0))
@@ -75,7 +75,7 @@ class TestFmtTime(unittest.TestCase):
 
 class TestFmtCost(unittest.TestCase):
     def test_none(self) -> None:
-        self.assertEqual("—", fmt_cost(None))
+        self.assertEqual("-", fmt_cost(None))
 
     def test_value(self) -> None:
         self.assertEqual("$4.23", fmt_cost(4.23))
@@ -86,7 +86,7 @@ class TestFmtCost(unittest.TestCase):
 
 class TestFmtRatio(unittest.TestCase):
     def test_none(self) -> None:
-        self.assertEqual("—", fmt_ratio(None))
+        self.assertEqual("-", fmt_ratio(None))
 
     def test_tokens(self) -> None:
         self.assertEqual("175K", fmt_ratio(175_000.0, "tokens"))
@@ -347,7 +347,7 @@ class TestRenderMarkdown(unittest.TestCase):
             lb = build_leaderboard([job_dir])
             md = render_markdown(lb)
 
-            self.assertIn("—", md)
+            self.assertIn("-", md)
 
 
 # ---------------------------------------------------------------------------

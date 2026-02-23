@@ -1,4 +1,4 @@
-"""CLI for attractorbench — generate tasks, score results, compare runs."""
+"""CLI for attractorbench: generate tasks, score results, compare runs."""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def score(
                 if tc is not None:
                     row.append(f"{tc.passed}/{tc.total} ({tc.pass_rate:.1%})")
                 else:
-                    row.append("—")
+                    row.append("-")
         row.extend([
             f"{reward.conformance_passed}/{reward.conformance_total} ({reward.conformance_pass_rate:.1%})",
             f"{reward.composite_score:.3f}",

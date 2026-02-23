@@ -225,7 +225,7 @@ class AdapterGenerationTests(unittest.TestCase):
         dockerfile = generate_dockerfile(self.tier)
         self.assertIn("/tests", dockerfile)
         self.assertIn("COPY starter/ /workspace/", dockerfile)
-        # Harbor uploads tests at verify time — no COPY needed
+        # Harbor uploads tests at verify time - no COPY needed
         self.assertNotIn("COPY tests/", dockerfile)
 
     def test_stacked_test_sh_uses_full_suite(self) -> None:

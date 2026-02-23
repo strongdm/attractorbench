@@ -40,7 +40,7 @@ def _is_curriculum_task_name(task_name: str) -> bool:
 def fmt_tokens(n: int | None) -> str:
     """Format a token count for display."""
     if n is None:
-        return "—"
+        return "-"
     if n < 1_000:
         return str(n)
     if n < 1_000_000:
@@ -51,7 +51,7 @@ def fmt_tokens(n: int | None) -> str:
 def fmt_time(s: float | None) -> str:
     """Format seconds into a human-readable duration."""
     if s is None:
-        return "—"
+        return "-"
     s_int = int(s)
     if s_int < 60:
         return f"{s_int}s"
@@ -66,14 +66,14 @@ def fmt_time(s: float | None) -> str:
 def fmt_cost(c: float | None) -> str:
     """Format a USD cost for display."""
     if c is None:
-        return "—"
+        return "-"
     return f"${c:.2f}"
 
 
 def fmt_ratio(value: float | None, kind: str = "tokens") -> str:
     """Format a per-point ratio (tokens/pt or $/pt)."""
     if value is None:
-        return "—"
+        return "-"
     if kind == "cost":
         return fmt_cost(value)
     return fmt_tokens(int(value))
@@ -243,11 +243,11 @@ def load_harbor_metrics(job_dir: Path) -> RunMetadata | None:
             if cr is not None:
                 total_cache_read += cr
         elif n_cache is not None and has_any_tokens:
-            # No trajectory — treat n_cache_tokens as cache reads (conservative)
+            # No trajectory - treat n_cache_tokens as cache reads (conservative)
             total_cache_read += n_cache
 
     if not has_any_tokens:
-        # No token data at all — still return agent/model + wall time
+        # No token data at all - still return agent/model + wall time
         return RunMetadata(
             agent=agent_name,
             model=display_model,
@@ -424,7 +424,7 @@ def sort_leaderboard(leaderboard: Leaderboard, sort_by: str = "composite") -> Le
 def _fmt_tier(rate: float | None) -> str:
     """Format a per-tier conformance rate for display."""
     if rate is None:
-        return "—"
+        return "-"
     return f"{rate:.1%}"
 
 
@@ -466,7 +466,7 @@ def render_table(leaderboard: Leaderboard, console: Console) -> None:
         row.extend([
             fmt_tokens(e.total_tokens),
             fmt_time(e.wall_seconds),
-            str(e.tool_calls) if e.tool_calls is not None else "—",
+            str(e.tool_calls) if e.tool_calls is not None else "-",
             fmt_cost(e.cost_usd),
             fmt_ratio(e.tokens_per_point, "tokens"),
             fmt_ratio(e.cost_per_point, "cost"),
@@ -497,7 +497,7 @@ def render_markdown(leaderboard: Leaderboard) -> str:
         sep,
     ]
     for e in leaderboard.entries:
-        tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
+        tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "-"
         tier_cols = ""
         if has_tiers:
             tier_cols = (
@@ -538,7 +538,7 @@ def _extract_job_date(job_dir: Path) -> str:
 
 
 def build_run_log(job_dirs: list[Path]) -> list[RunLogEntry]:
-    """Build a run log — one entry per job directory."""
+    """Build a run log - one entry per job directory."""
     entries: list[RunLogEntry] = []
 
     for job_dir in job_dirs:
@@ -599,9 +599,9 @@ def render_run_log_table(entries: list[RunLogEntry], console: Console) -> None:
             f"{e.avg_composite:.3f}",
             fmt_tokens(e.total_tokens),
             fmt_time(e.wall_seconds),
-            str(e.tool_calls) if e.tool_calls is not None else "—",
+            str(e.tool_calls) if e.tool_calls is not None else "-",
             fmt_cost(e.cost_usd),
-            e.date or "—",
+            e.date or "-",
         )
 
     console.print(table)
@@ -618,12 +618,12 @@ def render_run_log_markdown(entries: list[RunLogEntry]) -> str:
         "|-----|---------------|-------|-------|--------|------:|------:|-------:|-----:|-----------:|-----:|------|",
     ]
     for e in entries:
-        tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
+        tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "-"
         lines.append(
             f"| {e.job_name} | {e.bench_version or 'unknown'} | {e.agent} | {e.model} | {e.effort or 'unknown'} "
             f"| {e.tasks} | {e.avg_composite:.3f} "
             f"| {fmt_tokens(e.total_tokens)} | {fmt_time(e.wall_seconds)} "
             f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "
-            f"| {e.date or '—'} |"
+            f"| {e.date or '-'} |"
         )
     return "\n".join(lines)

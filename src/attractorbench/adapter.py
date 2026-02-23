@@ -49,7 +49,7 @@ def generate_instruction(tier: TierDef) -> str:
             dod_checklist += f"- [ ] {item.text}\n"
     recommended_loop = _recommended_loop_for_tier(tier.tier)
 
-    return f"""# {tier.name} — attractorbench Tier {tier.tier}
+    return f"""# {tier.name} - attractorbench Tier {tier.tier}
 
 You are implementing **{tier.name}** from the Attractor NLSpec suite.
 
@@ -109,9 +109,9 @@ def _conformance_contract(tier: int) -> str:
     if tier == 0:
         return """Your implementation must expose a CLI at `./bin/conformance` with these subcommands:
 
-- `./bin/conformance client-from-env` — Read OPENAI_API_KEY from the environment. Print "ok" and exit 0 if set, exit 1 otherwise.
-- `./bin/conformance list-models` — Send GET to $OPENAI_BASE_URL/models. Print the JSON response to stdout. Exit 0.
-- `./bin/conformance complete` — Read a JSON request from stdin. POST it to $OPENAI_BASE_URL/responses. Print the JSON response to stdout. Exit 0.
+- `./bin/conformance client-from-env` - Read OPENAI_API_KEY from the environment. Print "ok" and exit 0 if set, exit 1 otherwise.
+- `./bin/conformance list-models` - Send GET to $OPENAI_BASE_URL/models. Print the JSON response to stdout. Exit 0.
+- `./bin/conformance complete` - Read a JSON request from stdin. POST it to $OPENAI_BASE_URL/responses. Print the JSON response to stdout. Exit 0.
 
 The mock LLM server runs at `http://localhost:9999` inside the test container. Set environment variables:
 - `OPENAI_API_KEY=test-key`
@@ -120,12 +120,12 @@ The mock LLM server runs at `http://localhost:9999` inside the test container. S
     elif tier == 1:
         return """Your implementation must expose a CLI at `./bin/conformance` with these subcommands:
 
-- `./bin/conformance client-from-env` — Construct a client from environment variables. Exit 0 on success, non-zero on failure.
-- `./bin/conformance complete` — Read a JSON Request from stdin, send it to the LLM API (or mock), write JSON Response to stdout.
-- `./bin/conformance stream` — Read a JSON Request from stdin, stream the response, write newline-delimited JSON StreamEvents to stdout.
-- `./bin/conformance tool-call` — Read a JSON Request (with tools defined) from stdin, process tool calls, write JSON Response to stdout.
-- `./bin/conformance generate-object` — Read a JSON Request with a schema from stdin, write the parsed object to stdout.
-- `./bin/conformance list-models` — Write a JSON array of model info objects to stdout.
+- `./bin/conformance client-from-env` - Construct a client from environment variables. Exit 0 on success, non-zero on failure.
+- `./bin/conformance complete` - Read a JSON Request from stdin, send it to the LLM API (or mock), write JSON Response to stdout.
+- `./bin/conformance stream` - Read a JSON Request from stdin, stream the response, write newline-delimited JSON StreamEvents to stdout.
+- `./bin/conformance tool-call` - Read a JSON Request (with tools defined) from stdin, process tool calls, write JSON Response to stdout.
+- `./bin/conformance generate-object` - Read a JSON Request with a schema from stdin, write the parsed object to stdout.
+- `./bin/conformance list-models` - Write a JSON array of model info objects to stdout.
 
 The mock LLM server runs at `http://localhost:9999` inside the test container. Set environment variables:
 - `OPENAI_API_KEY=test-key`
@@ -138,21 +138,21 @@ The mock LLM server runs at `http://localhost:9999` inside the test container. S
     elif tier == 2:
         return """Your implementation must expose a CLI at `./bin/conformance` with these subcommands:
 
-- `./bin/conformance session-create` — Create a session with a mock provider profile. Exit 0 on success.
-- `./bin/conformance process-input` — Read a JSON task prompt from stdin, run the agentic loop against the mock LLM, write JSON session result to stdout.
-- `./bin/conformance tool-dispatch` — Read a JSON tool call from stdin, dispatch it, write JSON tool result to stdout.
-- `./bin/conformance steering` — Read a JSON steering message from stdin, inject it into a running session, write acknowledgment to stdout.
-- `./bin/conformance events` — Run a short session, write newline-delimited JSON events to stdout.
+- `./bin/conformance session-create` - Create a session with a mock provider profile. Exit 0 on success.
+- `./bin/conformance process-input` - Read a JSON task prompt from stdin, run the agentic loop against the mock LLM, write JSON session result to stdout.
+- `./bin/conformance tool-dispatch` - Read a JSON tool call from stdin, dispatch it, write JSON tool result to stdout.
+- `./bin/conformance steering` - Read a JSON steering message from stdin, inject it into a running session, write acknowledgment to stdout.
+- `./bin/conformance events` - Run a short session, write newline-delimited JSON events to stdout.
 
 The mock LLM server runs at `http://localhost:9999` inside the test container.
 """
     else:
         return """Your implementation must expose a CLI at `./bin/conformance` with these subcommands:
 
-- `./bin/conformance parse <dotfile>` — Parse a DOT file, write JSON AST to stdout.
-- `./bin/conformance validate <dotfile>` — Validate a DOT file, write JSON diagnostics to stdout.
-- `./bin/conformance run <dotfile>` — Execute the pipeline with a mock backend, write JSON execution result to stdout.
-- `./bin/conformance list-handlers` — Write a JSON array of registered handler types to stdout.
+- `./bin/conformance parse <dotfile>` - Parse a DOT file, write JSON AST to stdout.
+- `./bin/conformance validate <dotfile>` - Validate a DOT file, write JSON diagnostics to stdout.
+- `./bin/conformance run <dotfile>` - Execute the pipeline with a mock backend, write JSON execution result to stdout.
+- `./bin/conformance list-handlers` - Write a JSON array of registered handler types to stdout.
 
 The mock LLM backend runs at `http://localhost:9999` inside the test container. The `CodergenBackend` should send requests there.
 """
@@ -189,7 +189,7 @@ WORKDIR /workspace
 
 def generate_test_sh(tier: TierDef, *, suite: str = "full") -> str:
     return f"""#!/bin/bash
-# attractorbench Tier {tier.tier}: {tier.name} — Verifier
+# attractorbench Tier {tier.tier}: {tier.name} - Verifier
 set -uo pipefail
 set +e
 
@@ -1053,7 +1053,7 @@ def tier1_tests():
         t.error = f"Invalid JSON: {out[:200]}"
     tests.append(t)
 
-    # Provider adapters — test Anthropic
+    # Provider adapters - test Anthropic
     anthropic_request = json.dumps({
         "model": "claude-sonnet-4-20250514",
         "provider": "anthropic",
@@ -1073,7 +1073,7 @@ def tier1_tests():
         t.error = f"Invalid JSON: {out[:200]}"
     tests.append(t)
 
-    # Message & Content Model — multimodal message
+    # Message & Content Model - multimodal message
     mm_request = json.dumps({
         "model": "gpt-4o",
         "provider": "openai",
@@ -1093,7 +1093,7 @@ def tier1_tests():
         t.error = err[:500]
     tests.append(t)
 
-    # Error handling — test with a bad endpoint
+    # Error handling - test with a bad endpoint
     t = ConformanceTest("error_handling", "error_handling", "Errors surfaced with error key or non-zero exit")
     err_request = json.dumps({
         "model": "nonexistent",
@@ -1132,7 +1132,7 @@ def tier1_tests():
         t.error = "Expected non-zero exit when API keys are unset"
     tests.append(t)
 
-    # Provider routing — OpenAI
+    # Provider routing - OpenAI
     reset_mock_requests()
     openai_route_req = json.dumps({
         "model": "gpt-4o",
@@ -1149,7 +1149,7 @@ def tier1_tests():
         t.error = "OpenAI provider did not hit /v1/responses or /v1/chat/completions"
     tests.append(t)
 
-    # Provider routing — Anthropic
+    # Provider routing - Anthropic
     reset_mock_requests()
     anthropic_route_req = json.dumps({
         "model": "claude-sonnet-4-20250514",
@@ -1497,7 +1497,7 @@ def tier1_tests():
     tests.append(t)
 
     # Rate limit handling
-    t = ConformanceTest("rate_limit_handling", "error_handling", "Rate limited endpoint does not crash silently")
+    t = ConformanceTest("rate_limit_handling", "error_handling", "Rate limited endpoint stays upright")
     rate_req = json.dumps({
         "model": "gpt-4o",
         "provider": "openai",
@@ -1508,7 +1508,7 @@ def tier1_tests():
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "complete"], stdin_data=rate_req)
     t.duration = time.time() - start
-    # Should either retry and succeed, return error JSON, or non-zero exit — not crash
+    # Should either retry and succeed, return error JSON, or non-zero exit (must stay upright)
     t.passed = code >= 0  # Did not crash (timeout would be -1)
     if code == 0:
         try:
@@ -1816,7 +1816,7 @@ def tier2_tests():
         "tool_name": "nonexistent_tool_xyz",
         "arguments": {},
     })
-    t = ConformanceTest("tool_dispatch_unknown", "tool_execution", "Unknown tool returns error, not crash")
+    t = ConformanceTest("tool_dispatch_unknown", "tool_execution", "Unknown tool returns error gracefully")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "tool-dispatch"], stdin_data=unknown_tool)
     t.duration = time.time() - start
@@ -1854,7 +1854,7 @@ def tier2_tests():
         "tool_name": "read_file",
         "arguments": "not_valid_json{{{",
     })
-    t = ConformanceTest("tool_dispatch_bad_args", "tool_execution", "Malformed args produce error, not crash")
+    t = ConformanceTest("tool_dispatch_bad_args", "tool_execution", "Malformed args produce error gracefully")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "tool-dispatch"], stdin_data=bad_args_tool)
     t.duration = time.time() - start
@@ -2196,7 +2196,7 @@ def tier3_tests():
     (dot_dir / "bad_edge.dot").write_text(BAD_EDGE_DOT)
     (dot_dir / "missing_prompt.dot").write_text(MISSING_PROMPT_DOT)
 
-    # DOT Parsing — simple graph
+    # DOT Parsing - simple graph
     t = ConformanceTest("parse_simple", "dot_parsing", "Parse simple pipeline: nodes have id, edges have from/to, has start")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "parse", str(dot_dir / "simple.dot")])
@@ -2226,7 +2226,7 @@ def tier3_tests():
         t.error = f"Invalid JSON AST: {out[:200]}"
     tests.append(t)
 
-    # DOT Parsing — attributes
+    # DOT Parsing - attributes
     t = ConformanceTest("parse_attributes", "dot_parsing", "Parse DOT: edges have label/weight attributes")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "parse", str(dot_dir / "attributes.dot")])
@@ -2252,7 +2252,7 @@ def tier3_tests():
         t.error = f"Invalid JSON: {out[:200]}"
     tests.append(t)
 
-    # DOT Parsing — conditional
+    # DOT Parsing - conditional
     t = ConformanceTest("parse_conditional", "dot_parsing", "Parse DOT: conditional edges with condition attr, >=2 from check")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "parse", str(dot_dir / "conditional.dot")])
@@ -2281,7 +2281,7 @@ def tier3_tests():
         t.error = f"Invalid JSON: {out[:200]}"
     tests.append(t)
 
-    # Validation — missing start
+    # Validation - missing start
     t = ConformanceTest("validate_missing_start", "validation", "Validate DOT without start node produces error")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "validate", str(dot_dir / "missing_start.dot")])
@@ -2306,7 +2306,7 @@ def tier3_tests():
         t.error = f"Expected error for missing start node: {out[:200]}"
     tests.append(t)
 
-    # Validation — orphan node
+    # Validation - orphan node
     t = ConformanceTest("validate_orphan", "validation", "Validate DOT with orphan node produces warning")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "validate", str(dot_dir / "orphan.dot")])
@@ -2331,7 +2331,7 @@ def tier3_tests():
         t.error = f"Expected warning for orphan node: {out[:200]}"
     tests.append(t)
 
-    # Validation — valid graph
+    # Validation - valid graph
     t = ConformanceTest("validate_valid", "validation", "Validate valid DOT produces no errors")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "validate", str(dot_dir / "simple.dot")])
@@ -2350,7 +2350,7 @@ def tier3_tests():
         t.passed = code == 0
     tests.append(t)
 
-    # Execution — simple linear pipeline
+    # Execution - simple linear pipeline
     reset_mock_requests()
     t = ConformanceTest("execute_linear", "execution_engine", "Execute simple pipeline with status field; mock LLM called")
     start = time.time()
@@ -2376,7 +2376,7 @@ def tier3_tests():
         t.error = err[:500] if err else out[:500]
     tests.append(t)
 
-    # Execution — conditional branching
+    # Execution - conditional branching
     t = ConformanceTest("execute_conditional", "execution_engine", "Execute conditional pipeline with status field")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "run", str(dot_dir / "conditional.dot")], timeout=60)
@@ -2394,7 +2394,7 @@ def tier3_tests():
         t.error = err[:500] if err else out[:500]
     tests.append(t)
 
-    # Execution — goal gate
+    # Execution - goal gate
     reset_mock_requests()
     t = ConformanceTest("execute_goal_gate", "goal_gate", "Goal gate with status field; mock called")
     start = time.time()
@@ -2593,7 +2593,7 @@ def tier3_tests():
     code, out, err = run_cmd([CONFORMANCE_BIN, "validate", str(dot_dir / "simple.dot")])
     t.duration = time.time() - start
     # This just tests that the validator handles edge validation at all
-    t.passed = code == 0 or code != 0  # Always passes — the fixture doesn't violate this rule
+    t.passed = code == 0 or code != 0  # Always passes - the fixture doesn't violate this rule
     # Real check: if a fixture had an edge INTO start, we'd want error/warning
     t.passed = code == 0  # Valid DOT should pass validation
     tests.append(t)
@@ -2645,7 +2645,7 @@ def tier3_tests():
     t.duration = time.time() - start
     t.passed = code != -1  # Not a timeout
     if not t.passed:
-        t.error = "Pipeline timed out — may be looping"
+        t.error = "Pipeline timed out -may be looping"
     tests.append(t)
 
     # Goal gate failure
@@ -2739,7 +2739,7 @@ def tier3_tests():
     tests.append(t)
 
     # Execute conditional branch
-    t = ConformanceTest("execute_conditional_branch", "execution_engine", "Only one branch taken, not both")
+    t = ConformanceTest("execute_conditional_branch", "execution_engine", "Only one branch taken (mutual exclusion)")
     start = time.time()
     code, out, err = run_cmd([CONFORMANCE_BIN, "run", str(dot_dir / "conditional.dot")], timeout=60)
     t.duration = time.time() - start
@@ -2747,11 +2747,11 @@ def tier3_tests():
         result = json.loads(out)
         result_str = json.dumps(result).lower()
         # Check that we don't see BOTH path_a and path_b executed
-        # (One or neither is fine — the mock may not produce the right conditions)
+        # (One or neither is fine - the mock may not produce the right conditions)
         both_paths = "path_a" in result_str and "path_b" in result_str
         t.passed = code == 0 and isinstance(result, dict)
         if both_paths:
-            # Both paths executed is a failure — conditional routing should pick one
+            # Both paths executed is a failure - conditional routing should pick one
             t.passed = False
             t.error = "Both conditional branches were taken"
     except (json.JSONDecodeError, ValueError):
@@ -3448,7 +3448,7 @@ def generate_stacked_instruction(stacked: StackedTierDef) -> str:
 
         layer_summaries.append(f"""## Layer {tier.tier}: {tier.name}
 
-**Full specification**: `/workspace/specs/tier{tier.tier}_spec.md` — read this file before implementing this layer.
+**Full specification**: `/workspace/specs/tier{tier.tier}_spec.md` - read this file before implementing this layer.
 
 ### Conformance Contract
 
@@ -3462,7 +3462,7 @@ def generate_stacked_instruction(stacked: StackedTierDef) -> str:
     layers_text = "\n---\n\n".join(layer_summaries)
     recommended_loop = _recommended_loop_for_stacked()
 
-    return f"""# Full Stack — attractorbench Tiers 1-3
+    return f"""# Full Stack - attractorbench Tiers 1-3
 
 You are building three layers of a software system in one workspace.
 Each layer builds on the previous layer's implementation.
@@ -3472,18 +3472,18 @@ Read each spec file before implementing its layer.
 
 ## Architecture
 
-- **Layer 1: {tier1.name}** — multi-provider LLM client library
-- **Layer 2: {tier2.name}** — imports Layer 1's Client, Request, Response
-- **Layer 3: {tier3.name}** — imports Layer 2 as CodergenBackend
+- **Layer 1: {tier1.name}** - multi-provider LLM client library
+- **Layer 2: {tier2.name}** - imports Layer 1's Client, Request, Response
+- **Layer 3: {tier3.name}** - imports Layer 2 as CodergenBackend
 
 ## Implementation Constraints
 
 - Implement in any programming language
-- **Single codebase** — all three layers live in `/workspace`
+- **Single codebase** - all three layers live in `/workspace`
 - Provide a **single `Makefile`** with `build` and `test` targets that build and test ALL layers
 - The conformance CLI must be at `./bin/conformance` and support ALL subcommands from all three layers
-- Layer 2 **MUST** import and use Layer 1's LLM client (not a separate HTTP client)
-- Layer 3 **MUST** import and use Layer 2's agent loop as its CodergenBackend (not call LLM directly)
+- Layer 2 **MUST** import and use Layer 1's LLM client (the actual SDK, no separate HTTP client)
+- Layer 3 **MUST** import and use Layer 2's agent loop as its CodergenBackend (no direct LLM calls)
 - Write your own comprehensive test suite (run via `make test`)
 - All work goes in `/workspace`
 
@@ -3572,7 +3572,7 @@ WORKDIR /workspace
 def generate_stacked_test_sh(stacked: StackedTierDef) -> str:
     """Generate test.sh for the combined full-stack task."""
     return """#!/bin/bash
-# attractorbench Full Stack: Tiers 1-3 — Verifier
+# attractorbench Full Stack: Tiers 1-3 - Verifier
 set -uo pipefail
 set +e
 
@@ -4090,7 +4090,7 @@ def _generate_stacked_task(stacked: StackedTierDef, output_dir: Path) -> None:
     # task.toml
     (task_dir / "task.toml").write_text(generate_stacked_task_toml(stacked))
 
-    # instruction.md (short — refs /workspace/specs/ for full text)
+    # instruction.md (short - refs /workspace/specs/ for full text)
     (task_dir / "instruction.md").write_text(generate_stacked_instruction(stacked))
 
     # environment/Dockerfile + docker-compose + litellm config
@@ -4101,7 +4101,7 @@ def _generate_stacked_task(stacked: StackedTierDef, output_dir: Path) -> None:
     (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
     _write_starter_files(task_dir, default_tier=1)
 
-    # environment/specs/ — per-tier specification files (COPYd into container)
+    # environment/specs/ - per-tier specification files (COPYd into container)
     specs_dir = env_dir / "specs"
     specs_dir.mkdir()
     for filename, content in generate_stacked_spec_files(stacked).items():

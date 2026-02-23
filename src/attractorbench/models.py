@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 
 class RunMetadata(BaseModel):
-    """Run-level metadata — source TBD (sidecar file, Harbor API, etc.)."""
+    """Run-level metadata: source TBD (sidecar file, Harbor API, etc.)."""
 
     agent: str  # e.g. "claude-code", "aider"
     model: str  # e.g. "claude-opus-4-6", "gpt-4o"
@@ -22,7 +22,7 @@ class RunMetadata(BaseModel):
 
 
 class LeaderboardEntry(BaseModel):
-    """One row on the leaderboard — an agent+model run across task(s)."""
+    """One row on the leaderboard: an agent+model run across task(s)."""
 
     agent: str
     model: str
@@ -33,7 +33,7 @@ class LeaderboardEntry(BaseModel):
     avg_self_test: float
     avg_conformance: float
     avg_composite: float
-    # Efficiency metrics (nullable — source TBD)
+    # Efficiency metrics (nullable: source TBD)
     total_tokens: int | None = None
     wall_seconds: float | None = None
     tool_calls: int | None = None
@@ -48,7 +48,7 @@ class LeaderboardEntry(BaseModel):
 
 
 class RunLogEntry(BaseModel):
-    """One row in the run log — a single job directory's totals."""
+    """One row in the run log: a single job directory's totals."""
 
     job_name: str  # directory name, e.g. "gemini31-full"
     bench_version: str = ""
