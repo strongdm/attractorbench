@@ -1,0 +1,189 @@
+{
+  "tier": 2,
+  "tests": [
+    {
+      "name": "session_create",
+      "section": "core_loop",
+      "description": "Session can be created with id/session_id/status",
+      "passed": true,
+      "error": "",
+      "duration": 0.054
+    },
+    {
+      "name": "process_input",
+      "section": "core_loop",
+      "description": "process-input runs agentic loop with structured result",
+      "passed": false,
+      "error": "Mock LLM server was not called during process-input",
+      "duration": 0.05
+    },
+    {
+      "name": "tool_dispatch",
+      "section": "tool_execution",
+      "description": "tool-dispatch returns result/output/content/error",
+      "passed": true,
+      "error": "",
+      "duration": 0.025
+    },
+    {
+      "name": "events",
+      "section": "event_system",
+      "description": "events emits >=2 JSON events with type/kind/event field",
+      "passed": true,
+      "error": "",
+      "duration": 0.053
+    },
+    {
+      "name": "steering",
+      "section": "steering",
+      "description": "steering returns acknowledgment with status field",
+      "passed": true,
+      "error": "",
+      "duration": 0.015
+    },
+    {
+      "name": "process_input_calls_llm",
+      "section": "core_loop",
+      "description": "Mock received >=1 LLM request during process-input",
+      "passed": false,
+      "error": "Mock LLM server was not called during process-input",
+      "duration": 0.063
+    },
+    {
+      "name": "process_input_natural_end",
+      "section": "core_loop",
+      "description": "Text-only mock response produces clean completion",
+      "passed": false,
+      "error": "Expected clean completion status, got: 'ok'",
+      "duration": 0.052
+    },
+    {
+      "name": "session_create_format",
+      "section": "core_loop",
+      "description": "session-create returns JSON with id/session_id field",
+      "passed": true,
+      "error": "",
+      "duration": 0.052
+    },
+    {
+      "name": "tool_dispatch_unknown",
+      "section": "tool_execution",
+      "description": "Unknown tool returns error, not crash",
+      "passed": true,
+      "error": "",
+      "duration": 0.025
+    },
+    {
+      "name": "tool_dispatch_format",
+      "section": "tool_execution",
+      "description": "tool-dispatch result has result/output/content field",
+      "passed": true,
+      "error": "",
+      "duration": 0.024
+    },
+    {
+      "name": "tool_dispatch_bad_args",
+      "section": "tool_execution",
+      "description": "Malformed args produce error, not crash",
+      "passed": true,
+      "error": "",
+      "duration": 0.027
+    },
+    {
+      "name": "events_have_type",
+      "section": "event_system",
+      "description": "Every event has type/kind/event field",
+      "passed": true,
+      "error": "",
+      "duration": 0.055
+    },
+    {
+      "name": "events_lifecycle",
+      "section": "event_system",
+      "description": "Events include session start/end markers",
+      "passed": false,
+      "error": "Missing lifecycle markers: start=False end=True",
+      "duration": 0.049
+    },
+    {
+      "name": "events_minimum_count",
+      "section": "event_system",
+      "description": ">=3 events emitted",
+      "passed": true,
+      "error": "",
+      "duration": 0.048
+    },
+    {
+      "name": "steering_format",
+      "section": "steering",
+      "description": "If JSON, has acknowledgment field",
+      "passed": true,
+      "error": "",
+      "duration": 0.015
+    },
+    {
+      "name": "process_input_system_prompt",
+      "section": "system_prompts",
+      "description": "Mock request log shows system message",
+      "passed": false,
+      "error": "No system message found in mock request bodies",
+      "duration": 0.058
+    },
+    {
+      "name": "process_input_graceful_error",
+      "section": "error_handling",
+      "description": "Connection failure produces meaningful error",
+      "passed": true,
+      "error": "",
+      "duration": 0.051
+    },
+    {
+      "name": "tool_dispatch_shell",
+      "section": "execution_environment",
+      "description": "Shell echo hello output contains hello",
+      "passed": false,
+      "error": "Output does not contain 'hello': {\"tool_call_id\": \"call_d1b2bbd6\", \"content\": \"Unknown tool: \", \"is_error\": true}\n",
+      "duration": 0.025
+    },
+    {
+      "name": "tool_dispatch_read_file",
+      "section": "execution_environment",
+      "description": "read_file returns file contents",
+      "passed": false,
+      "error": "Output does not contain expected file content: {\"tool_call_id\": \"call_2c77c2f5\", \"content\": \"Unknown tool: \", \"is_error\": true}\n",
+      "duration": 0.024
+    }
+  ],
+  "sections": {
+    "core_loop": {
+      "total": 5,
+      "passed": 2
+    },
+    "tool_execution": {
+      "total": 4,
+      "passed": 4
+    },
+    "event_system": {
+      "total": 4,
+      "passed": 3
+    },
+    "steering": {
+      "total": 2,
+      "passed": 2
+    },
+    "system_prompts": {
+      "total": 1,
+      "passed": 0
+    },
+    "error_handling": {
+      "total": 1,
+      "passed": 1
+    },
+    "execution_environment": {
+      "total": 2,
+      "passed": 0
+    }
+  },
+  "total": 19,
+  "passed": 12
+}

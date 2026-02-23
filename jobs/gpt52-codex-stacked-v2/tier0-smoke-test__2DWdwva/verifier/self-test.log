@@ -1,0 +1,12 @@
+=== Phase 2: Self-test ===
+test_binary_exists_and_executable (test_conformance.ConformanceCLITests.test_binary_exists_and_executable) ... ok
+test_client_from_env_missing_key_exits_1 (test_conformance.ConformanceCLITests.test_client_from_env_missing_key_exits_1) ... ok
+test_client_from_env_ok (test_conformance.ConformanceCLITests.test_client_from_env_ok) ... ok
+test_complete_posts_to_responses_and_returns_json (test_conformance.ConformanceCLITests.test_complete_posts_to_responses_and_returns_json) ... ok
+test_list_models_gets_models (test_conformance.ConformanceCLITests.test_list_models_gets_models) ... ok
+
+----------------------------------------------------------------------
+Ran 5 tests in 1.175s
+
+OK
+Self-test exit code: 0

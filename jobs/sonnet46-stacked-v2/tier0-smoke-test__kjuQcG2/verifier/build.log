@@ -1,0 +1,4 @@
+=== Phase 1: Build ===
+chmod +x bin/conformance
+Build complete: bin/conformance is ready
+Build exit code: 0

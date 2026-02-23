@@ -1,0 +1,257 @@
+{
+  "tier": 1,
+  "tests": [
+    {
+      "name": "build_check",
+      "section": "core_infra",
+      "description": "make build succeeds",
+      "passed": true,
+      "error": "",
+      "duration": 0.717
+    },
+    {
+      "name": "client_from_env",
+      "section": "core_infra",
+      "description": "Client construction from env vars",
+      "passed": true,
+      "error": "",
+      "duration": 0.024
+    },
+    {
+      "name": "list_models",
+      "section": "core_infra",
+      "description": "list-models returns JSON array",
+      "passed": true,
+      "error": "",
+      "duration": 0.024
+    },
+    {
+      "name": "complete_request",
+      "section": "generation",
+      "description": "complete returns valid Response JSON",
+      "passed": false,
+      "error": "Invalid JSON response: ",
+      "duration": 0.029
+    },
+    {
+      "name": "stream_request",
+      "section": "generation",
+      "description": "stream returns newline-delimited JSON events",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.027
+    },
+    {
+      "name": "tool_call",
+      "section": "tool_calling",
+      "description": "Tool calling returns tool_call in response",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.029
+    },
+    {
+      "name": "generate_object",
+      "section": "generation",
+      "description": "generate-object returns parsed structured output",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.029
+    },
+    {
+      "name": "anthropic_complete",
+      "section": "provider_adapters",
+      "description": "Anthropic adapter complete works",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.028
+    },
+    {
+      "name": "multimodal_message",
+      "section": "message_content_model",
+      "description": "Multimodal messages accepted",
+      "passed": true,
+      "error": "",
+      "duration": 0.052
+    },
+    {
+      "name": "error_handling",
+      "section": "error_handling",
+      "description": "Errors surfaced with error key or non-zero exit",
+      "passed": true,
+      "error": "",
+      "duration": 0.029
+    },
+    {
+      "name": "client_from_env_missing_key",
+      "section": "core_infra",
+      "description": "Unset API keys must exit non-zero",
+      "passed": true,
+      "error": "",
+      "duration": 0.023
+    },
+    {
+      "name": "provider_routing_openai",
+      "section": "core_infra",
+      "description": "provider=openai hits /v1/responses",
+      "passed": false,
+      "error": "OpenAI provider did not hit /v1/responses or /v1/chat/completions",
+      "duration": 0.028
+    },
+    {
+      "name": "provider_routing_anthropic",
+      "section": "core_infra",
+      "description": "provider=anthropic hits /messages",
+      "passed": false,
+      "error": "Anthropic provider did not hit /messages endpoint",
+      "duration": 0.029
+    },
+    {
+      "name": "default_provider_fallback",
+      "section": "core_infra",
+      "description": "No provider field still succeeds",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.027
+    },
+    {
+      "name": "stream_event_types",
+      "section": "generation",
+      "description": "Stream events include delta and terminal type",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.029
+    },
+    {
+      "name": "stream_text_concat",
+      "section": "generation",
+      "description": "Concatenated delta text is non-empty string",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.027
+    },
+    {
+      "name": "generate_object_schema",
+      "section": "generation",
+      "description": "generate-object attempts schema fields; mock called",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.028
+    },
+    {
+      "name": "tool_call_name_match",
+      "section": "tool_calling",
+      "description": "Tool call name is get_weather",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.029
+    },
+    {
+      "name": "tool_call_args_valid",
+      "section": "tool_calling",
+      "description": "Tool call arguments have location key",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.027
+    },
+    {
+      "name": "anthropic_tool_call",
+      "section": "provider_adapters",
+      "description": "Tool call with provider=anthropic; hits /messages",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.029
+    },
+    {
+      "name": "anthropic_stream",
+      "section": "provider_adapters",
+      "description": "Stream with provider=anthropic returns events",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.03
+    },
+    {
+      "name": "gemini_complete",
+      "section": "provider_adapters",
+      "description": "Complete with provider=gemini; hits generateContent",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.028
+    },
+    {
+      "name": "rate_limit_handling",
+      "section": "error_handling",
+      "description": "Rate limited endpoint does not crash silently",
+      "passed": true,
+      "error": "",
+      "duration": 0.029
+    },
+    {
+      "name": "auth_error_handling",
+      "section": "error_handling",
+      "description": "Auth error returns immediately with error",
+      "passed": true,
+      "error": "",
+      "duration": 0.029
+    },
+    {
+      "name": "text_only_message",
+      "section": "message_content_model",
+      "description": "Simple string content works",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.029
+    },
+    {
+      "name": "tool_result_roundtrip",
+      "section": "message_content_model",
+      "description": "Tool calls + tool results in history",
+      "passed": false,
+      "error": "json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart\n",
+      "duration": 0.029
+    },
+    {
+      "name": "complete_response_id",
+      "section": "generation",
+      "description": "Response id field is a non-empty string",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.029
+    },
+    {
+      "name": "complete_usage_fields",
+      "section": "generation",
+      "description": "Response has usage with token count fields",
+      "passed": false,
+      "error": "Invalid JSON: ",
+      "duration": 0.028
+    }
+  ],
+  "sections": {
+    "core_infra": {
+      "total": 7,
+      "passed": 4
+    },
+    "generation": {
+      "total": 8,
+      "passed": 0
+    },
+    "tool_calling": {
+      "total": 3,
+      "passed": 0
+    },
+    "provider_adapters": {
+      "total": 4,
+      "passed": 0
+    },
+    "message_content_model": {
+      "total": 3,
+      "passed": 1
+    },
+    "error_handling": {
+      "total": 3,
+      "passed": 3
+    }
+  },
+  "total": 28,
+  "passed": 8
+}

@@ -1,0 +1,1456 @@
+     1→# Coding Agent Loop Specification
+     2→
+     3→This document is a language-agnostic specification for building a coding agent -- an autonomous system that pairs a large language model with developer tools through an agentic loop. It is designed to be implementable from scratch by any developer or coding agent in any programming language.
+     4→
+     5→This spec layers on top of the [Unified LLM Client Specification](./unified-llm-spec.md), which handles all LLM communication. The agent loop uses the SDK's low-level `Client.complete()` and `Client.stream()` methods directly, implementing its own turn loop to interleave tool execution with truncation, steering, events, and loop detection.
+     6→
+     7→---
+     8→
+     9→## Table of Contents
+    10→
+    11→1. [Overview and Goals](#1-overview-and-goals)
+    12→2. [Agentic Loop](#2-agentic-loop)
+    13→3. [Provider-Aligned Toolsets](#3-provider-aligned-toolsets)
+    14→4. [Tool Execution Environment](#4-tool-execution-environment)
+    15→5. [Tool Output and Context Management](#5-tool-output-and-context-management)
+    16→6. [System Prompts and Environment Context](#6-system-prompts-and-environment-context)
+    17→7. [Subagents](#7-subagents)
+    18→8. [Out of Scope (Nice-to-Haves)](#8-out-of-scope-nice-to-haves)
+    19→9. [Definition of Done](#9-definition-of-done)
+    20→
+    21→---
+    22→
+    23→## 1. Overview and Goals
+    24→
+    25→### 1.1 Problem Statement
+    26→
+    27→A coding agent is a system that takes a natural language instruction ("fix the login bug", "add dark mode", "write tests for this module"), plans a solution, and executes it by reading files, editing code, running commands, and iterating until the task is done. The core challenge is orchestrating an agentic loop that coordinates LLM calls, tool execution, context management, and provider-specific behavior into a reliable autonomous workflow.
+    28→
+    29→Each LLM provider's models are trained and optimized for specific tool interfaces and system prompts. GPT-5.2 and the GPT-5.2-codex series work best with the same tools and prompts as codex-rs. Gemini models work best with the same tools and prompts as gemini-cli. Anthropic models work best with the same tools and prompts as Claude Code. A good coding agent respects this reality rather than forcing a universal toolset on all models.
+    30→
+    31→### 1.2 Why a Library, Not a CLI
+    32→
+    33→Tools like Claude Code, Codex CLI, and Gemini CLI exist as end-user CLIs. You can run them in non-interactive mode and pipe output, but that gives you a black box: text goes in, text comes out. You cannot programmatically inspect the conversation mid-run, inject steering messages between tool calls, swap the execution environment, change reasoning effort on the fly, observe individual tool calls as they happen, or compose agents into larger systems.
+    34→
+    35→This spec defines a **library** -- a programmable agentic loop that a host application controls at every step. The host can:
+    36→
+    37→- **Submit input and observe every event** as the agent thinks, calls tools, and produces output -- not after the fact, but in real time as it happens.
+    38→- **Steer the agent mid-task** by injecting messages between tool rounds, redirecting it without restarting.
+    39→- **Change configuration on the fly** -- reasoning effort, model, timeouts -- between any two turns.
+    40→- **Swap where tools run** by providing a different execution environment (local, Docker, Kubernetes, WASM, SSH) without changing any tool logic.
+    41→- **Compose agents** by spawning subagents for parallel work, each with their own history but sharing the same filesystem.
+    42→- **Build on top of it** -- CLIs, IDEs, web UIs, batch systems, CI pipelines, evaluation harnesses, and agent-to-agent coordination systems all consume the same library.
+    43→
+    44→The fidelity of control is the point. Every coding agent CLI is built on an agentic loop internally; this spec makes that loop a first-class, programmable interface.
+    45→
+    46→### 1.3 Design Principles
+    47→
+    48→**Programmable-first.** The agent is a library, not a CLI. Every aspect of the loop -- tool execution, event delivery, steering, configuration -- is accessible programmatically. A CLI is one possible host application, not the primary interface.
+    49→
+    50→**Provider-aligned.** Each model family works best with its native agent's tools and system prompts. The spec defines provider-specific tool profiles, not a single universal set. Start from the provider's native toolset and extend it.
+    51→
+    52→**Extensible execution.** Tool execution is abstracted behind an `ExecutionEnvironment` interface. The default runs locally. Implementations can target Docker, Kubernetes, WASM, or any remote host. Changing where tools run should not require changing the tools themselves.
+    53→
+    54→**Event-driven.** Every agent action emits a typed event for UI rendering, logging, and integration. The event stream is the primary interface for host applications.
+    55→
+    56→**Hackable.** Reasonable defaults with override points everywhere -- timeouts, output sizes, tool sets, execution environments, system prompts, reasoning effort. The spec prescribes defaults, not ceilings.
+    57→
+    58→**Language-agnostic.** All code is pseudocode. Data structures use neutral notation. No specific programming language is assumed.
+    59→
+    60→### 1.3 Architecture
+    61→
+    62→```
+    63→+--------------------------------------------------+
+    64→|  Host Application (CLI, IDE, Web UI)              |
+    65→+--------------------------------------------------+
+    66→        |                            ^
+    67→        | submit(input)              | events
+    68→        v                            |
+    69→+--------------------------------------------------+
+    70→|  Coding Agent Loop                                |
+    71→|  +--------------------+  +---------------------+ |
+    72→|  | Session            |  | Provider Profiles   | |
+    73→|  |  - history         |  |  - OpenAI (codex)   | |
+    74→|  |  - steering queue  |  |  - Anthropic (cc)   | |
+    75→|  |  - event emitter   |  |  - Gemini (cli)     | |
+    76→|  +--------------------+  +---------------------+ |
+    77→|  +--------------------+  +---------------------+ |
+    78→|  | Tool Registry      |  | Execution Env       | |
+    79→|  |  - tool dispatch   |  |  - local (default)  | |
+    80→|  |  - truncation      |  |  - docker           | |
+    81→|  |  - validation      |  |  - k8s / wasm / ssh | |
+    82→|  +--------------------+  +---------------------+ |
+    83→+--------------------------------------------------+
+    84→        |
+    85→        v
+    86→+--------------------------------------------------+
+    87→|  Unified LLM SDK (Client.complete / stream)       |
+    88→+--------------------------------------------------+
+    89→        |
+    90→        v
+    91→+--------------------------------------------------+
+    92→|  LLM Provider APIs                                |
+    93→|  (OpenAI Responses / Anthropic Messages / Gemini) |
+    94→+--------------------------------------------------+
+    95→```
+    96→
+    97→The agent loop does NOT use the Unified LLM SDK's `generate()` high-level function (which has its own tool loop). It uses the low-level `Client.complete()` and implements its own loop because it needs to interleave tool execution with output truncation, steering message injection, event emission, timeout enforcement, and loop detection -- concerns that the SDK's generic tool loop does not handle.
+    98→
+    99→### 1.4 Reference Projects
+   100→
+   101→The following open-source projects solve related problems and are worth studying for anyone implementing this spec.
+   102→
+   103→- **codex-rs** (https://github.com/openai/codex/tree/main/codex-rs) -- Rust. OpenAI's coding agent. Demonstrates async turn-based loop, 15+ tools including `apply_patch` (v4a diff format), output truncation with head/tail split (1 MiB cap), 10-second default command timeout, platform-specific sandboxing, sub-agent spawning, and environment variable filtering.
+   104→
+   105→- **pi-agent-core** (https://github.com/badlogic/pi-mono/tree/main/packages/agent) -- TypeScript. Minimal agent core by @mariozechner. Demonstrates 4-tool minimalism (read, write, edit, bash), explicit `steer()` and `followUp()` queues for mid-turn message injection, 15+ event types, configurable thinking levels, context transform hooks, and abort signal support.
+   106→
+   107→- **gemini-cli** (https://github.com/google-gemini/gemini-cli) -- TypeScript. Google's CLI agent. Demonstrates ReAct loop, 18+ built-in tools including web search and web fetch, GEMINI.md for project-specific instructions, headless/non-interactive mode for automation, and multiple authentication methods.
+   108→
+   109→### 1.5 Relationship to the Unified LLM SDK
+   110→
+   111→This spec assumes the companion Unified LLM Client Specification is implemented. The agent loop imports and uses these types directly:
+   112→
+   113→- `Client`, `Request`, `Response` -- for LLM communication
+   114→- `Message`, `ContentPart`, `Role` -- for conversation history
+   115→- `Tool`, `ToolCall`, `ToolResult` -- for tool definitions and results
+   116→- `StreamEvent` -- for streaming responses
+   117→- `Usage` -- for token tracking
+   118→- `FinishReason` -- for stop condition detection
+   119→
+   120→The agent builds `Request` objects, calls `Client.complete()` or `Client.stream()`, processes the `Response`, executes any `ToolCall` objects through the execution environment, constructs `ToolResult` objects, appends them to the conversation, and loops.
+   121→
+   122→---
+   123→
+   124→## 2. Agentic Loop
+   125→
+   126→### 2.1 Session
+   127→
+   128→The Session is the central orchestrator. It holds the conversation state, dispatches tool calls, manages the event stream, and enforces limits.
+   129→
+   130→```
+   131→RECORD Session:
+   132→    id                : String                  -- UUID, assigned at creation
+   133→    provider_profile  : ProviderProfile         -- tools + system prompt for the active model
+   134→    execution_env     : ExecutionEnvironment    -- where tools run
+   135→    history           : List<Turn>              -- ordered conversation turns
+   136→    event_emitter     : EventEmitter            -- delivers events to host application
+   137→    config            : SessionConfig           -- limits, timeouts, settings
+   138→    state             : SessionState            -- current lifecycle state
+   139→    llm_client        : Client                  -- from the Unified LLM SDK
+   140→    steering_queue    : Queue<String>           -- messages to inject between tool rounds
+   141→    followup_queue    : Queue<String>           -- messages to process after current input completes
+   142→    subagents         : Map<String, SubAgent>   -- active child agents
+   143→```
+   144→
+   145→### 2.2 Session Configuration
+   146→
+   147→```
+   148→RECORD SessionConfig:
+   149→    max_turns                   : Integer = 0       -- 0 = unlimited
+   150→    max_tool_rounds_per_input   : Integer = 0       -- 0 = unlimited, per user input, not per session
+   151→    default_command_timeout_ms  : Integer = 10000   -- 10 seconds
+   152→    max_command_timeout_ms      : Integer = 600000  -- 10 minutes
+   153→    reasoning_effort            : String | None     -- "low", "medium", "high", or null
+   154→    tool_output_limits          : Map<String, Integer>  -- per-tool char limits (see Section 5)
+   155→    enable_loop_detection       : Boolean = true
+   156→    loop_detection_window       : Integer = 10      -- consecutive identical calls before warning
+   157→    max_subagent_depth          : Integer = 1       -- max nesting level for subagents
+   158→```
+   159→
+   160→### 2.3 Session Lifecycle
+   161→
+   162→```
+   163→ENUM SessionState:
+   164→    IDLE              -- waiting for user input
+   165→    PROCESSING        -- running the agentic loop
+   166→    AWAITING_INPUT    -- model asked the user a question
+   167→    CLOSED            -- session terminated (normal or error)
+   168→```
+   169→
+   170→State transitions:
+   171→
+   172→```
+   173→IDLE -> PROCESSING          -- on submit()
+   174→PROCESSING -> PROCESSING    -- tool loop continues
+   175→PROCESSING -> AWAITING_INPUT -- model asks user a question (no tool calls, open-ended)
+   176→PROCESSING -> IDLE          -- natural completion or turn limit
+   177→PROCESSING -> CLOSED        -- unrecoverable error
+   178→IDLE -> CLOSED              -- explicit close()
+   179→any -> CLOSED               -- abort signal
+   180→AWAITING_INPUT -> PROCESSING -- user provides answer
+   181→```
+   182→
+   183→### 2.4 Turn Types
+   184→
+   185→A Turn is a single entry in the conversation history.
+   186→
+   187→```
+   188→RECORD UserTurn:
+   189→    content     : String
+   190→    timestamp   : Timestamp
+   191→
+   192→RECORD AssistantTurn:
+   193→    content     : String            -- text output
+   194→    tool_calls  : List<ToolCall>    -- tool invocations requested by the model
+   195→    reasoning   : String | None     -- thinking/reasoning text (if available)
+   196→    usage       : Usage             -- token counts for this turn
+   197→    response_id : String | None     -- provider response ID
+   198→    timestamp   : Timestamp
+   199→
+   200→RECORD ToolResultsTurn:
+   201→    results     : List<ToolResult>  -- one per tool call
+   202→    timestamp   : Timestamp
+   203→
+   204→RECORD SystemTurn:
+   205→    content     : String
+   206→    timestamp   : Timestamp
+   207→
+   208→RECORD SteeringTurn:
+   209→    content     : String            -- injected steering message
+   210→    timestamp   : Timestamp
+   211→```
+   212→
+   213→### 2.5 The Core Agentic Loop
+   214→
+   215→This is the centerpiece of the spec. The loop runs until the model produces a text-only response (no tool calls), a limit is hit, or an abort signal fires.
+   216→
+   217→```
+   218→FUNCTION process_input(session, user_input):
+   219→    session.state = PROCESSING
+   220→    session.history.APPEND(UserTurn(content = user_input))
+   221→    session.emit(USER_INPUT, content = user_input)
+   222→
+   223→    -- Drain any pending steering messages before the first LLM call
+   224→    drain_steering(session)
+   225→
+   226→    round_count = 0
+   227→
+   228→    LOOP:
+   229→        -- 1. Check limits
+   230→        IF session.config.max_tool_rounds_per_input > 0 AND round_count >= session.config.max_tool_rounds_per_input:
+   231→            session.emit(TURN_LIMIT, round = round_count)
+   232→            BREAK
+   233→
+   234→        IF session.config.max_turns > 0 AND count_turns(session) >= session.config.max_turns:
+   235→            session.emit(TURN_LIMIT, total_turns = count_turns(session))
+   236→            BREAK
+   237→
+   238→        IF session.abort_signaled:
+   239→            BREAK
+   240→
+   241→        -- 2. Build LLM request using provider profile
+   242→        system_prompt = session.provider_profile.build_system_prompt(
+   243→            environment = session.execution_env,
+   244→            project_docs = discover_project_docs(session.execution_env.working_directory())
+   245→        )
+   246→        messages = convert_history_to_messages(session.history)
+   247→        tool_defs = session.provider_profile.tools()
+   248→
+   249→        request = Request(
+   250→            model           = session.provider_profile.model,
+   251→            messages        = [Message.system(system_prompt)] + messages,
+   252→            tools           = tool_defs,
+   253→            tool_choice     = "auto",
+   254→            reasoning_effort = session.config.reasoning_effort,
+   255→            provider        = session.provider_profile.id,
+   256→            provider_options = session.provider_profile.provider_options()
+   257→        )
+   258→
+   259→        -- 3. Call LLM via Unified LLM SDK (single-shot, no SDK-level tool loop)
+   260→        response = session.llm_client.complete(request)
+   261→
+   262→        -- 4. Record assistant turn
+   263→        assistant_turn = AssistantTurn(
+   264→            content     = response.text,
+   265→            tool_calls  = response.tool_calls,
+   266→            reasoning   = response.reasoning,
+   267→            usage       = response.usage,
+   268→            response_id = response.id
+   269→        )
+   270→        session.history.APPEND(assistant_turn)
+   271→        session.emit(ASSISTANT_TEXT_END, text = response.text, reasoning = response.reasoning)
+   272→
+   273→        -- 5. If no tool calls, natural completion
+   274→        IF response.tool_calls IS EMPTY:
+   275→            BREAK
+   276→
+   277→        -- 6. Execute tool calls through the execution environment
+   278→        round_count += 1
+   279→        results = execute_tool_calls(session, response.tool_calls)
+   280→        session.history.APPEND(ToolResultsTurn(results = results))
+   281→
+   282→        -- 7. Drain steering messages injected during tool execution
+   283→        drain_steering(session)
+   284→
+   285→        -- 8. Loop detection
+   286→        IF session.config.enable_loop_detection:
+   287→            IF detect_loop(session.history, session.config.loop_detection_window):
+   288→                warning = "Loop detected: the last " + session.config.loop_detection_window
+   289→                        + " tool calls follow a repeating pattern. Try a different approach."
+   290→                session.history.APPEND(SteeringTurn(content = warning))
+   291→                session.emit(LOOP_DETECTION, message = warning)
+   292→
+   293→    END LOOP
+   294→
+   295→    -- Process follow-up messages if any are queued
+   296→    IF session.followup_queue IS NOT EMPTY:
+   297→        next_input = session.followup_queue.DEQUEUE()
+   298→        process_input(session, next_input)
+   299→        RETURN
+   300→
+   301→    session.state = IDLE
+   302→    session.emit(SESSION_END)
+   303→
+   304→
+   305→FUNCTION drain_steering(session):
+   306→    WHILE session.steering_queue IS NOT EMPTY:
+   307→        msg = session.steering_queue.DEQUEUE()
+   308→        session.history.APPEND(SteeringTurn(content = msg))
+   309→        session.emit(STEERING_INJECTED, content = msg)
+   310→
+   311→
+   312→FUNCTION execute_tool_calls(session, tool_calls):
+   313→    results = []
+   314→
+   315→    -- Execute tool calls (concurrently if profile supports parallel execution)
+   316→    IF session.provider_profile.supports_parallel_tool_calls AND LENGTH(tool_calls) > 1:
+   317→        results = AWAIT_ALL([
+   318→            execute_single_tool(session, tc) FOR tc IN tool_calls
+   319→        ])
+   320→    ELSE:
+   321→        FOR EACH tc IN tool_calls:
+   322→            result = execute_single_tool(session, tc)
+   323→            results.APPEND(result)
+   324→    RETURN results
+   325→
+   326→
+   327→FUNCTION execute_single_tool(session, tool_call):
+   328→    session.emit(TOOL_CALL_START, tool_name = tool_call.name, call_id = tool_call.id)
+   329→
+   330→    -- Look up tool in registry
+   331→    registered = session.provider_profile.tool_registry.get(tool_call.name)
+   332→    IF registered IS None:
+   333→        error_msg = "Unknown tool: " + tool_call.name
+   334→        session.emit(TOOL_CALL_END, call_id = tool_call.id, error = error_msg)
+   335→        RETURN ToolResult(tool_call_id = tool_call.id, content = error_msg, is_error = true)
+   336→
+   337→    -- Execute via execution environment
+   338→    TRY:
+   339→        raw_output = registered.execute(tool_call.arguments, session.execution_env)
+   340→
+   341→        -- Truncate output before sending to LLM (character-based first, then line-based)
+   342→        truncated_output = truncate_tool_output(raw_output, tool_call.name, session.config)
+   343→
+   344→        -- Emit full output via event stream (not truncated)
+   345→        session.emit(TOOL_CALL_END, call_id = tool_call.id, output = raw_output)
+   346→
+   347→        RETURN ToolResult(
+   348→            tool_call_id = tool_call.id,
+   349→            content = truncated_output,
+   350→            is_error = false
+   351→        )
+   352→
+   353→    CATCH error:
+   354→        error_msg = "Tool error (" + tool_call.name + "): " + str(error)
+   355→        session.emit(TOOL_CALL_END, call_id = tool_call.id, error = error_msg)
+   356→        RETURN ToolResult(tool_call_id = tool_call.id, content = error_msg, is_error = true)
+   357→```
+   358→
+   359→### 2.6 Steering
+   360→
+   361→Steering allows the host application to inject messages into the conversation between tool rounds. This is how a user can redirect the agent mid-task without waiting for it to finish.
+   362→
+   363→```
+   364→session.steer(message: String)
+   365→    -- Queue a message to be injected after the current tool round completes.
+   366→    -- The message becomes a SteeringTurn in the history, converted to a
+   367→    -- user message for the LLM on the next call.
+   368→    -- If the agent is idle, the message is delivered on the next submit().
+   369→
+   370→session.follow_up(message: String)
+   371→    -- Queue a message to be processed after the current input is fully handled
+   372→    -- (model has produced a text-only response). Triggers a new processing cycle.
+   373→```
+   374→
+   375→SteeringTurns are converted to user-role messages when building the LLM request. This means the model sees them as additional user instructions.
+   376→
+   377→### 2.7 Reasoning Effort
+   378→
+   379→The `reasoning_effort` config controls how much reasoning/thinking the model does. It maps directly to the Unified LLM SDK's `reasoning_effort` field on the Request.
+   380→
+   381→| Value    | Effect                                                           |
+   382→|----------|------------------------------------------------------------------|
+   383→| "low"    | Minimal reasoning. Faster, cheaper. Good for simple tasks.      |
+   384→| "medium" | Balanced reasoning. Default for most tasks.                     |
+   385→| "high"   | Deep reasoning. Slower, more expensive. Good for complex tasks. |
+   386→| null     | Provider default (no override).                                 |
+   387→
+   388→Changing `reasoning_effort` mid-session takes effect on the next LLM call. For OpenAI reasoning models (GPT-5.2 series), this controls the reasoning token budget. For Anthropic models with extended thinking, this maps to the thinking budget. For Gemini models with thinking, this maps to thinkingConfig.
+   389→
+   390→### 2.8 Stop Conditions
+   391→
+   392→The loop exits when any of these conditions is met:
+   393→
+   394→1. **Natural completion.** The model responds with text only (no tool calls). The model is done.
+   395→2. **Round limit.** `max_tool_rounds_per_input` is reached. The agent stops and returns what it has.
+   396→3. **Turn limit.** `max_turns` across the entire session is reached.
+   397→4. **Abort signal.** The host application signals cancellation. The current LLM stream is closed, running processes are killed, and the session transitions to CLOSED.
+   398→5. **Unrecoverable error.** An authentication error, context overflow, or other non-retryable error. The session transitions to CLOSED.
+   399→
+   400→### 2.9 Event System
+   401→
+   402→Every agent action emits a typed event. Events are delivered via an async iterator (or language-appropriate equivalent) to the host application.
+   403→
+   404→```
+   405→RECORD SessionEvent:
+   406→    kind        : EventKind
+   407→    timestamp   : Timestamp
+   408→    session_id  : String
+   409→    data        : Map<String, Any>
+   410→
+   411→ENUM EventKind:
+   412→    SESSION_START           -- session created
+   413→    SESSION_END             -- session closed (includes final state)
+   414→    USER_INPUT              -- user submitted input
+   415→    ASSISTANT_TEXT_START     -- model began generating text
+   416→    ASSISTANT_TEXT_DELTA     -- incremental text token
+   417→    ASSISTANT_TEXT_END       -- model finished text (includes full text)
+   418→    TOOL_CALL_START         -- tool execution began (includes tool name, call ID)
+   419→    TOOL_CALL_OUTPUT_DELTA  -- incremental tool output (for streaming tools)
+   420→    TOOL_CALL_END           -- tool execution finished (includes FULL untruncated output)
+   421→    STEERING_INJECTED       -- a steering message was added to history
+   422→    TURN_LIMIT              -- a turn limit was hit
+   423→    LOOP_DETECTION          -- a loop pattern was detected
+   424→    ERROR                   -- an error occurred
+   425→```
+   426→
+   427→**Key design decision:** The `TOOL_CALL_END` event carries the FULL untruncated tool output. The LLM receives the truncated version. This means the host application (UI, logs) always has access to complete output even though the model sees an abbreviated version.
+   428→
+   429→### 2.10 Loop Detection
+   430→
+   431→Track the signature of each tool call (name + arguments hash). If the last N calls (default: 10) contain a repeating pattern (e.g., the same 2-3 calls cycling), inject a warning as a SteeringTurn telling the model to try a different approach.
+   432→
+   433→```
+   434→FUNCTION detect_loop(history, window_size) -> Boolean:
+   435→    recent_calls = extract_tool_call_signatures(history, last = window_size)
+   436→    IF LENGTH(recent_calls) < window_size: RETURN false
+   437→
+   438→    -- Check for repeating patterns of length 1, 2, or 3
+   439→    FOR pattern_len IN [1, 2, 3]:
+   440→        IF window_size % pattern_len != 0: CONTINUE
+   441→        pattern = recent_calls[0..pattern_len]
+   442→        all_match = true
+   443→        FOR i FROM pattern_len TO window_size STEP pattern_len:
+   444→            IF recent_calls[i..i+pattern_len] != pattern:
+   445→                all_match = false
+   446→                BREAK
+   447→        IF all_match: RETURN true
+   448→
+   449→    RETURN false
+   450→```
+   451→
+   452→---
+   453→
+   454→## 3. Provider-Aligned Toolsets
+   455→
+   456→### 3.1 The Provider Alignment Principle
+   457→
+   458→Models are trained and optimized for specific tool interfaces. OpenAI's models are trained on codex-rs's apply_patch format and tool schemas. Anthropic's models are trained on Claude Code's old_string/new_string editing and tool schemas. Gemini models are trained on gemini-cli's tool set.
+   459→
+   460→Using a provider's native tool format produces better results than forcing a universal format. **The initial base for each provider should be a 1:1 copy of the provider's reference agent -- the exact same system prompt, the exact same tool definitions, byte for byte.** Not a similar prompt. Not similar tools. The actual prompt and harness that the model was evaluated and optimized against. Then extend it with additional capabilities (like subagents). Do not make all providers conform to a single tool interface.
+   461→
+   462→### 3.2 ProviderProfile Interface
+   463→
+   464→```
+   465→INTERFACE ProviderProfile:
+   466→    id              : String            -- "openai", "anthropic", "gemini"
+   467→    model           : String            -- model identifier (e.g., "gpt-5.2-codex")
+   468→    tool_registry   : ToolRegistry      -- all tools available to this profile
+   469→
+   470→    FUNCTION build_system_prompt(environment, project_docs) -> String
+   471→    FUNCTION tools() -> List<ToolDefinition>
+   472→    FUNCTION provider_options() -> Map | None
+   473→
+   474→    -- Capability flags
+   475→    supports_reasoning           : Boolean
+   476→    supports_streaming           : Boolean
+   477→    supports_parallel_tool_calls : Boolean
+   478→    context_window_size          : Integer
+   479→```
+   480→
+   481→### 3.3 Shared Core Tools
+   482→
+   483→All profiles include these base tools. The parameter schemas and output formats may vary between profiles (to match the provider's native conventions), but the functionality is the same.
+   484→
+   485→#### read_file
+   486→
+   487→Reads a file's contents with line numbers.
+   488→
+   489→```
+   490→TOOL read_file:
+   491→    description: "Read a file from the filesystem. Returns line-numbered content."
+   492→    parameters:
+   493→        file_path   : String (required)     -- absolute path to the file
+   494→        offset      : Integer (optional)    -- 1-based line number to start reading from
+   495→        limit       : Integer (optional)    -- max lines to read (default: 2000)
+   496→    returns: Line-numbered text content in "NNN | content" format
+   497→    errors: File not found, permission denied, binary file
+   498→```
+   499→
+   500→Behavior: Read the file, prepend line numbers, respect offset/limit. For image files, return the image data for multimodal models. For very large files without offset/limit, the tool output will be truncated by the truncation layer (Section 5).
+   501→
+   502→#### write_file
+   503→
+   504→Writes content to a file, creating it if it does not exist.
+   505→
+   506→```
+   507→TOOL write_file:
+   508→    description: "Write content to a file. Creates the file and parent directories if needed."
+   509→    parameters:
+   510→        file_path   : String (required)     -- absolute path
+   511→        content     : String (required)     -- the full file content
+   512→    returns: Confirmation message with bytes written
+   513→    errors: Permission denied, disk full
+   514→```
+   515→
+   516→#### edit_file
+   517→
+   518→Searches for an exact string in a file and replaces it. This is the native editing format for Anthropic models.
+   519→
+   520→```
+   521→TOOL edit_file:
+   522→    description: "Replace an exact string occurrence in a file."
+   523→    parameters:
+   524→        file_path   : String (required)
+   525→        old_string  : String (required)     -- exact text to find
+   526→        new_string  : String (required)     -- replacement text
+   527→        replace_all : Boolean (optional)    -- replace all occurrences (default: false)
+   528→    returns: Confirmation with number of replacements made
+   529→    errors: File not found, old_string not found, old_string not unique (when replace_all=false)
+   530→```
+   531→
+   532→Behavior: Exact string match. If `old_string` is not found exactly, the implementation may attempt fuzzy matching (whitespace normalization, Unicode equivalence) and report the match. If `old_string` matches multiple locations and `replace_all` is false, return an error asking the model to provide more context.
+   533→
+   534→#### shell
+   535→
+   536→Executes a command in the system shell.
+   537→
+   538→```
+   539→TOOL shell:
+   540→    description: "Execute a shell command. Returns stdout, stderr, and exit code."
+   541→    parameters:
+   542→        command     : String (required)     -- the command to run
+   543→        timeout_ms  : Integer (optional)    -- override default timeout
+   544→        description : String (optional)     -- human-readable description of what this does
+   545→    returns: Command output (stdout + stderr), exit code, duration
+   546→    errors: Timeout, permission denied, command not found
+   547→```
+   548→
+   549→Behavior: Run in a new process group. Enforce timeout (default from SessionConfig, overridable per-call). On timeout: SIGTERM, wait 2 seconds, SIGKILL. Return collected output plus timeout message. Environment variable filtering applied (see Section 4).
+   550→
+   551→#### grep
+   552→
+   553→Searches file contents by pattern.
+   554→
+   555→```
+   556→TOOL grep:
+   557→    description: "Search file contents using regex patterns."
+   558→    parameters:
+   559→        pattern         : String (required)     -- regex pattern
+   560→        path            : String (optional)     -- directory or file to search (default: working dir)
+   561→        glob_filter     : String (optional)     -- file pattern filter (e.g., "*.py")
+   562→        case_insensitive: Boolean (optional)    -- default: false
+   563→        max_results     : Integer (optional)    -- default: 100
+   564→    returns: Matching lines with file paths and line numbers
+   565→    errors: Invalid regex, path not found
+   566→```
+   567→
+   568→#### glob
+   569→
+   570→Finds files by name pattern.
+   571→
+   572→```
+   573→TOOL glob:
+   574→    description: "Find files matching a glob pattern."
+   575→    parameters:
+   576→        pattern     : String (required)     -- glob pattern (e.g., "**/*.ts")
+   577→        path        : String (optional)     -- base directory (default: working dir)
+   578→    returns: List of matching file paths, sorted by modification time (newest first)
+   579→    errors: Invalid pattern, path not found
+   580→```
+   581→
+   582→### 3.4 OpenAI Profile (codex-rs-aligned)
+   583→
+   584→For GPT-5.2, GPT-5.2-codex, and other OpenAI models. Mirrors the codex-rs toolset.
+   585→
+   586→**Key difference: `apply_patch` replaces `edit_file` and `write_file` for file modifications.** OpenAI models are specifically trained on this format and produce significantly better edits when using it.
+   587→
+   588→Additional/modified tools beyond the shared core:
+   589→
+   590→#### apply_patch (OpenAI-specific)
+   591→
+   592→```
+   593→TOOL apply_patch:
+   594→    description: "Apply code changes using the patch format. Supports creating, deleting,
+   595→                  and modifying files in a single operation."
+   596→    parameters:
+   597→        patch       : String (required)     -- the patch content in v4a format
+   598→    returns: List of affected file paths and operations performed
+   599→    errors: Parse error, file not found (for updates), verification failure
+   600→```
+   601→
+   602→The patch format is defined in full in [Appendix A](#appendix-a-apply_patch-v4a-format-reference).
+   603→
+   604→**Profile tool list for OpenAI:**
+   605→- `read_file` (same as shared core, maps to codex-rs `read_file`)
+   606→- `apply_patch` (replaces `edit_file` and `write_file` for modifications)
+   607→- `write_file` (kept for creating new files without patch overhead)
+   608→- `shell` (maps to codex-rs `exec_command`, 10s default timeout)
+   609→- `grep` (maps to codex-rs `grep_files`)
+   610→- `glob` (maps to codex-rs `list_dir`)
+   611→- `spawn_agent`, `send_input`, `wait`, `close_agent` (subagent tools, Section 7)
+   612→
+   613→**System prompt:** Should mirror the codex-rs system prompt structure. Cover identity, tool usage guidelines, the apply_patch format expectations, and coding best practices.
+   614→
+   615→**Provider options:** The OpenAI profile should set `reasoning.effort` on the Responses API request when `reasoning_effort` is configured.
+   616→
+   617→### 3.5 Anthropic Profile (Claude Code-aligned)
+   618→
+   619→For Claude Opus 4.6, Opus 4.5, Sonnet 4.5, Haiku 4.5, and older Claude models. Mirrors the Claude Code toolset.
+   620→
+   621→**Key difference: `edit_file` with `old_string`/`new_string` is the native editing format.** Anthropic models are specifically trained on this exact-match search-and-replace pattern. Do NOT use apply_patch with Anthropic models.
+   622→
+   623→**Profile tool list for Anthropic:**
+   624→- `read_file` (line-numbered output, offset/limit support)
+   625→- `write_file` (full file writes)
+   626→- `edit_file` (old_string/new_string -- this is the native format)
+   627→- `shell` (bash execution, 120s default timeout per Claude Code convention)
+   628→- `grep` (ripgrep-backed with output modes: content, files_with_matches, count)
+   629→- `glob` (file pattern matching sorted by mtime)
+   630→- Subagent tools (maps to Claude Code's Task tool pattern, Section 7)
+   631→
+   632→**System prompt:** Should mirror the Claude Code system prompt structure. Cover identity, tool selection guidance, the edit_file format (explain that `old_string` must be unique), file operation preferences (edit existing files over creating new ones), and coding best practices.
+   633→
+   634→**Provider options:** The Anthropic profile should pass beta headers (e.g., for extended thinking, 1M context) via `provider_options.anthropic.beta_headers`.
+   635→
+   636→### 3.6 Gemini Profile (gemini-cli-aligned)
+   637→
+   638→For Gemini 3 Flash, Gemini 2.5 Pro/Flash, and other Gemini models. Mirrors the gemini-cli toolset.
+   639→
+   640→**Profile tool list for Gemini:**
+   641→- `read_file` / `read_many_files` (batch reading support)
+   642→- `write_file`
+   643→- `edit_file` (search-and-replace style, matching gemini-cli conventions)
+   644→- `shell` (command execution, 10s default timeout)
+   645→- `grep` (ripgrep semantics)
+   646→- `glob` (file pattern matching)
+   647→- `list_dir` (directory listing with depth options)
+   648→- `web_search` (optional -- Gemini models have native grounding capabilities)
+   649→- `web_fetch` (optional -- fetch and extract content from URLs)
+   650→- Subagent tools (Section 7)
+   651→
+   652→**System prompt:** Should mirror the gemini-cli system prompt structure. Cover identity, tool usage, GEMINI.md conventions, and coding best practices.
+   653→
+   654→**Provider options:** Gemini profile should configure safety settings and grounding via `provider_options.gemini`.
+   655→
+   656→### 3.7 Extending Profiles with Custom Tools
+   657→
+   658→After a provider profile is loaded, additional tools can be registered:
+   659→
+   660→```
+   661→profile = create_openai_profile(model = "gpt-5.2-codex")
+   662→
+   663→-- Add a custom tool on top of the profile
+   664→profile.tool_registry.register(RegisteredTool(
+   665→    definition = ToolDefinition(
+   666→        name = "run_tests",
+   667→        description = "Run the project's test suite",
+   668→        parameters = { "type": "object", "properties": { "filter": { "type": "string" } } }
+   669→    ),
+   670→    executor = run_tests_function
+   671→))
+   672→```
+   673→
+   674→Name collisions are resolved by latest-wins: a custom tool with the same name as a profile tool overrides it.
+   675→
+   676→### 3.8 Tool Registry
+   677→
+   678→```
+   679→RECORD ToolDefinition:
+   680→    name        : String            -- unique identifier
+   681→    description : String            -- for the LLM
+   682→    parameters  : Dict              -- JSON Schema (root must be "object")
+   683→
+   684→RECORD RegisteredTool:
+   685→    definition  : ToolDefinition
+   686→    executor    : Function          -- (arguments, execution_env) -> String
+   687→
+   688→RECORD ToolRegistry:
+   689→    _tools      : Map<String, RegisteredTool>
+   690→
+   691→    register(tool)                  -- add or replace a tool
+   692→    unregister(name)                -- remove a tool
+   693→    get(name) -> RegisteredTool | None
+   694→    definitions() -> List<ToolDefinition>
+   695→    names() -> List<String>
+   696→```
+   697→
+   698→**Tool execution pipeline:**
+   699→
+   700→```
+   701→1. LOOKUP      -- find the RegisteredTool by name
+   702→2. VALIDATE    -- parse and validate arguments against JSON Schema
+   703→3. EXECUTE     -- call executor with (arguments, execution_env)
+   704→4. TRUNCATE    -- apply output size limits (Section 5)
+   705→5. EMIT        -- emit TOOL_CALL_END event with full output
+   706→6. RETURN      -- return truncated output as ToolResult
+   707→```
+   708→
+   709→---
+   710→
+   711→## 4. Tool Execution Environment
+   712→
+   713→### 4.1 The Execution Environment Abstraction
+   714→
+   715→All tool operations pass through an `ExecutionEnvironment` interface. This decouples tool logic from where it runs. The default runs locally. Swap in a different implementation to run the same tools in Docker, on a Kubernetes pod, over SSH, or in WASM.
+   716→
+   717→```
+   718→INTERFACE ExecutionEnvironment:
+   719→    -- File operations
+   720→    read_file(path: String, offset: Integer | None, limit: Integer | None) -> String
+   721→    write_file(path: String, content: String) -> void
+   722→    file_exists(path: String) -> Boolean
+   723→    list_directory(path: String, depth: Integer) -> List<DirEntry>
+   724→
+   725→    -- Command execution
+   726→    exec_command(
+   727→        command     : String,
+   728→        timeout_ms  : Integer,
+   729→        working_dir : String | None,
+   730→        env_vars    : Map<String, String> | None
+   731→    ) -> ExecResult
+   732→
+   733→    -- Search operations
+   734→    grep(pattern: String, path: String, options: GrepOptions) -> String
+   735→    glob(pattern: String, path: String) -> List<String>
+   736→
+   737→    -- Lifecycle
+   738→    initialize() -> void
+   739→    cleanup() -> void
+   740→
+   741→    -- Metadata
+   742→    working_directory() -> String
+   743→    platform() -> String           -- "darwin", "linux", "windows", "wasm"
+   744→    os_version() -> String
+   745→
+   746→RECORD ExecResult:
+   747→    stdout      : String
+   748→    stderr      : String
+   749→    exit_code   : Integer
+   750→    timed_out   : Boolean
+   751→    duration_ms : Integer
+   752→
+   753→RECORD DirEntry:
+   754→    name        : String
+   755→    is_dir      : Boolean
+   756→    size        : Integer | None
+   757→```
+   758→
+   759→### 4.2 LocalExecutionEnvironment (Required Implementation)
+   760→
+   761→The default. Runs everything on the local machine.
+   762→
+   763→**File operations:** Direct filesystem access. Paths are resolved relative to `working_directory()`.
+   764→
+   765→**Command execution:**
+   766→- Spawn in a new process group for clean killability
+   767→- Use the platform's default shell (`/bin/bash -c` on Linux/macOS, `cmd.exe /c` on Windows)
+   768→- Enforce timeout: on timeout, send SIGTERM to the process group, wait 2 seconds, then SIGKILL
+   769→- Capture stdout and stderr separately, then combine for the result
+   770→- Record wall-clock duration
+   771→
+   772→**Environment variable filtering:**
+   773→- By default, exclude variables matching: `*_API_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD`, `*_CREDENTIAL` (case-insensitive)
+   774→- Always include: `PATH`, `HOME`, `USER`, `SHELL`, `LANG`, `TERM`, `TMPDIR`, language-specific paths (`GOPATH`, `CARGO_HOME`, `NVM_DIR`, etc.)
+   775→- Customizable via an env var policy: inherit all, inherit none (start clean), or inherit core only
+   776→
+   777→**Search operations:** Use `ripgrep` for grep if available, fall back to language-native regex search. Use filesystem globbing for glob.
+   778→
+   779→### 4.3 Alternative Environments (Extension Points)
+   780→
+   781→These are not required implementations. They demonstrate the extensibility of the interface.
+   782→
+   783→**DockerExecutionEnvironment:**
+   784→```
+   785→-- Commands execute inside a Docker container
+   786→exec_command(cmd, ...) -> docker exec <container_id> sh -c <cmd>
+   787→-- File operations use volume mounts or docker cp
+   788→read_file(path) -> docker cp <container_id>:<path> - | read
+   789→write_file(path, content) -> pipe content | docker cp - <container_id>:<path>
+   790→```
+   791→
+   792→**KubernetesExecutionEnvironment:**
+   793→```
+   794→-- Commands execute in a Kubernetes pod
+   795→exec_command(cmd, ...) -> kubectl exec <pod> -- sh -c <cmd>
+   796→-- File operations use kubectl cp
+   797→read_file(path) -> kubectl cp <pod>:<path> /dev/stdout
+   798→```
+   799→
+   800→**WASMExecutionEnvironment:**
+   801→```
+   802→-- For in-browser or embedded use
+   803→-- File operations use an in-memory filesystem (e.g., memfs)
+   804→-- Command execution is limited or emulated via WASI
+   805→```
+   806→
+   807→**RemoteSSHExecutionEnvironment:**
+   808→```
+   809→-- Commands execute over SSH
+   810→exec_command(cmd, ...) -> ssh <host> <cmd>
+   811→-- File operations use SCP/SFTP
+   812→read_file(path) -> sftp get <host>:<path>
+   813→```
+   814→
+   815→### 4.4 Composing Environments
+   816→
+   817→Execution environments can be wrapped for cross-cutting concerns:
+   818→
+   819→```
+   820→-- Logging wrapper
+   821→LoggingExecutionEnvironment(inner: ExecutionEnvironment):
+   822→    exec_command(cmd, ...):
+   823→        LOG("exec: " + cmd)
+   824→        result = inner.exec_command(cmd, ...)
+   825→        LOG("exit: " + result.exit_code + " in " + result.duration_ms + "ms")
+   826→        RETURN result
+   827→
+   828→-- Read-only wrapper (rejects all writes)
+   829→ReadOnlyExecutionEnvironment(inner: ExecutionEnvironment):
+   830→    write_file(path, content):
+   831→        RAISE "Write operations are disabled in read-only mode"
+   832→    exec_command(cmd, ...):
+   833→        -- Could analyze command for write intent, or allow all
+   834→        RETURN inner.exec_command(cmd, ...)
+   835→```
+   836→
+   837→---
+   838→
+   839→## 5. Tool Output and Context Management
+   840→
+   841→### 5.1 Tool Output Truncation
+   842→
+   843→When tool output exceeds the configured limit, it MUST be truncated before being sent to the LLM. The full output is always available via the event stream (`TOOL_CALL_END` event).
+   844→
+   845→**Truncation algorithm (head/tail split):**
+   846→
+   847→```
+   848→FUNCTION truncate_output(output: String, max_chars: Integer, mode: String) -> String:
+   849→    IF LENGTH(output) <= max_chars:
+   850→        RETURN output
+   851→
+   852→    IF mode == "head_tail":
+   853→        half = max_chars / 2
+   854→        removed = LENGTH(output) - max_chars
+   855→        RETURN output[0..half]
+   856→             + "\n\n[WARNING: Tool output was truncated. "
+   857→             + removed + " characters were removed from the middle. "
+   858→             + "The full output is available in the event stream. "
+   859→             + "If you need to see specific parts, re-run the tool with more targeted parameters.]\n\n"
+   860→             + output[-half..]
+   861→
+   862→    IF mode == "tail":
+   863→        removed = LENGTH(output) - max_chars
+   864→        RETURN "[WARNING: Tool output was truncated. First "
+   865→             + removed + " characters were removed. "
+   866→             + "The full output is available in the event stream.]\n\n"
+   867→             + output[-max_chars..]
+   868→```
+   869→
+   870→The truncation message explicitly tells the model that output was truncated, how much was removed, and where the full output lives. This prevents the model from making decisions based on incomplete information without knowing it is incomplete.
+   871→
+   872→### 5.2 Default Output Size Limits
+   873→
+   874→| Tool         | Default Max (chars) | Truncation Mode | Rationale                                            |
+   875→|--------------|---------------------|-----------------|------------------------------------------------------|
+   876→| read_file    | 50,000              | head_tail       | Keep beginning (imports/types) and end (recent code) |
+   877→| shell        | 30,000              | head_tail       | Beginning has startup info, end has results          |
+   878→| grep         | 20,000              | tail            | Keep the most recent/relevant matches                |
+   879→| glob         | 20,000              | tail            | Most recently modified files first                   |
+   880→| edit_file    | 10,000              | tail            | Confirmation output, usually short                   |
+   881→| apply_patch  | 10,000              | tail            | Patch results, usually short                         |
+   882→| write_file   | 1,000               | tail            | Confirmation, always short                           |
+   883→| spawn_agent  | 20,000              | head_tail       | Subagent results                                     |
+   884→
+   885→These defaults are overridable via `SessionConfig.tool_output_limits`.
+   886→
+   887→### 5.3 Truncation Order (Important)
+   888→
+   889→Character-based truncation (Section 5.1) is the primary safeguard and MUST always run first. It handles every case including pathological ones like a 2-line CSV where each line is 10MB. Line-based truncation is a secondary readability pass that runs after character truncation.
+   890→
+   891→The full pipeline for every tool output:
+   892→
+   893→```
+   894→FUNCTION truncate_tool_output(output, tool_name, config) -> String:
+   895→    max_chars = config.tool_output_limits.get(tool_name, DEFAULT_TOOL_LIMITS[tool_name])
+   896→
+   897→    -- Step 1: Character-based truncation (always runs, handles all size concerns)
+   898→    result = truncate_output(output, max_chars, DEFAULT_TRUNCATION_MODES[tool_name])
+   899→
+   900→    -- Step 2: Line-based truncation (secondary, for readability)
+   901→    max_lines = config.tool_line_limits.get(tool_name, DEFAULT_LINE_LIMITS[tool_name])
+   902→    IF max_lines IS NOT None:
+   903→        result = truncate_lines(result, max_lines)
+   904→
+   905→    RETURN result
+   906→```
+   907→
+   908→**Default line limits** (applied after character truncation):
+   909→
+   910→| Tool         | Default Max Lines | Rationale                                |
+   911→|--------------|-------------------|------------------------------------------|
+   912→| shell        | 256               | Command output with many short lines     |
+   913→| grep         | 200               | Search results, one per line             |
+   914→| glob         | 500               | File listings, one path per line         |
+   915→| read_file    | None              | Character limit is sufficient            |
+   916→| edit_file    | None              | Character limit is sufficient            |
+   917→
+   918→Line-based truncation uses the same head/tail split:
+   919→
+   920→```
+   921→FUNCTION truncate_lines(output: String, max_lines: Integer) -> String:
+   922→    lines = SPLIT(output, "\n")
+   923→    IF LENGTH(lines) <= max_lines:
+   924→        RETURN output
+   925→
+   926→    head_count = max_lines / 2
+   927→    tail_count = max_lines - head_count
+   928→    omitted = LENGTH(lines) - head_count - tail_count
+   929→
+   930→    RETURN JOIN(lines[0..head_count], "\n")
+   931→         + "\n[... " + omitted + " lines omitted ...]\n"
+   932→         + JOIN(lines[-tail_count..], "\n")
+   933→```
+   934→
+   935→**Why character truncation must come first:** A file could have 2 lines that are each 10MB. Line-based truncation would see "only 2 lines" and pass it through untouched, blowing up the context window. Character truncation catches this because it operates on raw size, not line count. Always truncate by size first, then by line count.
+   936→
+   937→### 5.4 Default Command Timeouts
+   938→
+   939→Every command execution has a default timeout. The model can override the timeout per-call via the shell tool's `timeout_ms` parameter.
+   940→
+   941→| Setting                      | Default   | Purpose                                |
+   942→|------------------------------|-----------|----------------------------------------|
+   943→| default_command_timeout_ms   | 10,000    | Applied when timeout_ms is not set     |
+   944→| max_command_timeout_ms       | 600,000   | Upper bound (10 minutes)               |
+   945→
+   946→When a timeout fires:
+   947→1. Send SIGTERM to the process group
+   948→2. Wait 2 seconds for graceful shutdown
+   949→3. Send SIGKILL if the process is still running
+   950→4. Return collected output so far plus a timeout message
+   951→
+   952→The timeout message sent to the LLM:
+   953→```
+   954→[ERROR: Command timed out after {X}ms. Partial output is shown above.
+   955→You can retry with a longer timeout by setting the timeout_ms parameter.]
+   956→```
+   957→
+   958→### 5.5 Context Window Awareness
+   959→
+   960→The agent should track approximate token usage using the heuristic: 1 token ~ 4 characters. Emit a warning event when usage exceeds 80% of the provider profile's `context_window_size`.
+   961→
+   962→This is informational only. The agent does NOT perform automatic compaction or summarization (that is out of scope for this spec). The host application can use this signal to implement its own context management strategy.
+   963→
+   964→```
+   965→FUNCTION check_context_usage(session):
+   966→    approx_tokens = total_chars_in_history(session.history) / 4
+   967→    threshold = session.provider_profile.context_window_size * 0.8
+   968→    IF approx_tokens > threshold:
+   969→        session.emit(WARNING, message = "Context usage at ~"
+   970→            + ROUND(approx_tokens / session.provider_profile.context_window_size * 100)
+   971→            + "% of context window")
+   972→```
+   973→
+   974→---
+   975→
+   976→## 6. System Prompts and Environment Context
+   977→
+   978→### 6.1 Layered System Prompt Construction
+   979→
+   980→The system prompt is assembled from multiple layers, with later layers taking precedence:
+   981→
+   982→```
+   983→final_system_prompt =
+   984→    1. Provider-specific base instructions     (from ProviderProfile)
+   985→  + 2. Environment context                     (platform, git, working dir, date, model info)
+   986→  + 3. Tool descriptions                       (from the active profile's tool set)
+   987→  + 4. Project-specific instructions           (AGENTS.md, CLAUDE.md, GEMINI.md, etc.)
+   988→  + 5. User instructions override              (appended last, highest priority)
+   989→```
+   990→
+   991→### 6.2 Provider-Specific Base Instructions
+   992→
+   993→Each profile supplies its own base prompt tuned for the model family. The base instructions should closely mirror the system prompts of the provider's native agent:
+   994→
+   995→- **OpenAI profile:** Mirror codex-rs system prompt. Cover identity, tool usage (especially apply_patch conventions), coding best practices, error handling guidance.
+   996→- **Anthropic profile:** Mirror Claude Code system prompt. Cover identity, tool selection guidance (read before edit, edit over write), the edit_file format (old_string must be unique), file operation preferences.
+   997→- **Gemini profile:** Mirror gemini-cli system prompt. Cover identity, tool usage, GEMINI.md conventions, coding best practices.
+   998→
+   999→The spec does NOT prescribe full system prompt text -- those are implementation details that change frequently. It specifies what topics the prompt must cover.
+  1000→
+  1001→### 6.3 Environment Context Block
+  1002→
+  1003→Include a structured block with runtime information:
+  1004→
+  1005→```
+  1006→<environment>
+  1007→Working directory: {working_directory}
+  1008→Is git repository: {true/false}
+  1009→Git branch: {current_branch}
+  1010→Platform: {darwin/linux/windows}
+  1011→OS version: {os_version_string}
+  1012→Today's date: {YYYY-MM-DD}
+  1013→Model: {model_display_name}
+  1014→Knowledge cutoff: {knowledge_cutoff_date}
+  1015→</environment>
+  1016→```
+  1017→
+  1018→This block is generated at session start and included in every system prompt.
+  1019→
+  1020→### 6.4 Git Context
+  1021→
+  1022→Snapshot at session start. Include:
+  1023→- Current branch
+  1024→- Short status (modified/untracked file count, not full diff)
+  1025→- Recent commit messages (last 5-10)
+  1026→
+  1027→The model can always run `git status`, `git diff`, etc. via the shell tool for current state. The snapshot provides initial orientation.
+  1028→
+  1029→### 6.5 Project Document Discovery
+  1030→
+  1031→Walk from the git root (or working directory if not in a git repo) to the current working directory. Recognized instruction files:
+  1032→
+  1033→| File Name                  | Convention       |
+  1034→|----------------------------|------------------|
+  1035→| `AGENTS.md`                | Universal        |
+  1036→| `CLAUDE.md`                | Anthropic-aligned|
+  1037→| `GEMINI.md`                | Gemini-aligned   |
+  1038→| `.codex/instructions.md`   | OpenAI-aligned   |
+  1039→
+  1040→**Loading rules:**
+  1041→- Root-level files are loaded first
+  1042→- Subdirectory files are appended (deeper = higher precedence)
+  1043→- Total byte budget: 32KB. If exceeded, truncate with a marker: "[Project instructions truncated at 32KB]"
+  1044→- Only load files matching the active provider profile (e.g., Anthropic profile loads AGENTS.md and CLAUDE.md, not GEMINI.md)
+  1045→- AGENTS.md is always loaded regardless of provider
+  1046→
+  1047→---
+  1048→
+  1049→## 7. Subagents
+  1050→
+  1051→### 7.1 Concept
+  1052→
+  1053→A subagent is a child session spawned by the parent to handle a scoped task. The subagent runs its own agentic loop with its own conversation history but shares the parent's execution environment (same filesystem, same working directory or a subdirectory). This enables parallel work and task decomposition.
+  1054→
+  1055→### 7.2 Spawn Interface
+  1056→
+  1057→```
+  1058→TOOL spawn_agent:
+  1059→    description: "Spawn a subagent to handle a scoped task autonomously."
+  1060→    parameters:
+  1061→        task            : String (required)     -- natural language task description
+  1062→        working_dir     : String (optional)     -- subdirectory to scope the agent to
+  1063→        model           : String (optional)     -- model override (default: parent's model)
+  1064→        max_turns       : Integer (optional)    -- turn limit (default: 0, unlimited)
+  1065→    returns: Agent ID and initial status
+  1066→
+  1067→TOOL send_input:
+  1068→    description: "Send a message to a running subagent."
+  1069→    parameters:
+  1070→        agent_id        : String (required)
+  1071→        message         : String (required)
+  1072→    returns: Acknowledgement
+  1073→
+  1074→TOOL wait:
+  1075→    description: "Wait for a subagent to complete and return its result."
+  1076→    parameters:
+  1077→        agent_id        : String (required)
+  1078→    returns: SubAgentResult (output text, success boolean, turns used)
+  1079→
+  1080→TOOL close_agent:
+  1081→    description: "Terminate a subagent."
+  1082→    parameters:
+  1083→        agent_id        : String (required)
+  1084→    returns: Final status
+  1085→```
+  1086→
+  1087→### 7.3 SubAgent Lifecycle
+  1088→
+  1089→```
+  1090→RECORD SubAgentHandle:
+  1091→    id          : String
+  1092→    session     : Session           -- independent session with own history
+  1093→    status      : "running" | "completed" | "failed"
+  1094→
+  1095→RECORD SubAgentResult:
+  1096→    output      : String            -- final text output from the subagent
+  1097→    success     : Boolean
+  1098→    turns_used  : Integer
+  1099→```
+  1100→
+  1101→The subagent:
+  1102→- Gets its own Session with independent conversation history
+  1103→- Shares the parent's `ExecutionEnvironment` (same filesystem)
+  1104→- Uses the parent's `ProviderProfile` (or an overridden model)
+  1105→- Has its own turn limits (configurable, default: 0, unlimited)
+  1106→- Cannot spawn sub-sub-agents (depth limiting, default max depth: 1, configurable via `max_subagent_depth`)
+  1107→
+  1108→### 7.4 Use Cases
+  1109→
+  1110→- **Parallel exploration:** Spawn multiple agents to investigate different parts of the codebase simultaneously
+  1111→- **Focused refactoring:** Scope an agent to a single module with a specific task
+  1112→- **Test execution:** Spawn an agent to run and fix tests while the parent continues other work
+  1113→- **Alternative approaches:** Spawn agents to try different solutions and pick the best one
+  1114→
+  1115→---
+  1116→
+  1117→## 8. Out of Scope (Nice-to-Haves)
+  1118→
+  1119→The following features are intentionally excluded from this core spec. They are valuable extensions that can be added on top of the architecture defined here. The spec's design has natural extension points for each.
+  1120→
+  1121→**MCP (Model Context Protocol).** An MCP client can extend the agent with tools from external servers (GitHub, databases, Slack, etc.). The tool registry supports registering MCP-discovered tools with namespaced names (e.g., `github__create_pr`). This is a natural extension but not a core requirement for a functional coding agent.
+  1122→
+  1123→**Skills / Custom Commands.** Reusable prompt templates stored as markdown files with YAML frontmatter. Skills standardize common workflows (e.g., `/commit`, `/review-pr`) and can be loaded from project directories or user home. The system prompt layer has a natural insertion point for skill descriptions.
+  1124→
+  1125→**Sandbox / Security Policies.** OS-level sandboxing (macOS Seatbelt, Linux Landlock/Seccomp, Windows restricted tokens) constrains file and network access. The `ExecutionEnvironment` abstraction provides a natural hook -- a `SandboxedLocalExecutionEnvironment` could wrap the default environment. For stronger isolation, use `DockerExecutionEnvironment`.
+  1126→
+  1127→**Compaction / Context Summarization.** Automatic conversation history summarization when approaching context limits. This is a complex feature with significant tradeoffs (information loss, summarization cost, pinned turns). The context window awareness signal (Section 5.5) gives host applications the information they need to implement their own strategy.
+  1128→
+  1129→**Approval / Permission System.** User approval gates for sensitive operations (file writes, shell commands, destructive actions). The tool execution pipeline (Section 3.8) has a natural extension point between VALIDATE and EXECUTE where an approval step can be inserted.
+  1130→
+  1131→**Read-Before-Write Guardrail.** Tracking which files have been read and blocking writes to unread files. A heuristic safety net that can be implemented as a tool execution middleware wrapping the execution environment.
+  1132→
+  1133→---
+  1134→
+  1135→## 9. Definition of Done
+  1136→
+  1137→This section defines how to validate that an implementation of this spec is complete and correct. An implementation is done when every item is checked off.
+  1138→
+  1139→### 9.1 Core Loop
+  1140→
+  1141→- [ ] Session can be created with a ProviderProfile and ExecutionEnvironment
+  1142→- [ ] `process_input()` runs the agentic loop: LLM call -> tool execution -> loop until natural completion
+  1143→- [ ] Natural completion: model responds with text only (no tool calls) and the loop exits
+  1144→- [ ] Round limits: `max_tool_rounds_per_input` stops the loop when reached
+  1145→- [ ] Session turn limits: `max_turns` stops the loop across all inputs
+  1146→- [ ] Abort signal: cancellation stops the loop, kills running processes, transitions to CLOSED
+  1147→- [ ] Loop detection: consecutive identical tool call patterns trigger a warning SteeringTurn
+  1148→- [ ] Multiple sequential inputs work: submit, wait for completion, submit again
+  1149→
+  1150→### 9.2 Provider Profiles
+  1151→
+  1152→- [ ] OpenAI profile provides codex-rs-aligned tools including `apply_patch` (v4a format)
+  1153→- [ ] Anthropic profile provides Claude Code-aligned tools including `edit_file` (old_string/new_string)
+  1154→- [ ] Gemini profile provides gemini-cli-aligned tools
+  1155→- [ ] Each profile produces a provider-specific system prompt covering identity, tool usage, and coding guidance
+  1156→- [ ] Custom tools can be registered on top of any profile
+  1157→- [ ] Tool name collisions resolved: custom registration overrides profile defaults
+  1158→
+  1159→### 9.3 Tool Execution
+  1160→
+  1161→- [ ] Tool calls are dispatched through the ToolRegistry
+  1162→- [ ] Unknown tool calls return an error result to the LLM (not an exception)
+  1163→- [ ] Tool argument JSON is parsed and validated against the tool's parameter schema
+  1164→- [ ] Tool execution errors are caught and returned as error results (`is_error = true`)
+  1165→- [ ] Parallel tool execution works when the profile's `supports_parallel_tool_calls` is true
+  1166→
+  1167→### 9.4 Execution Environment
+  1168→
+  1169→- [ ] `LocalExecutionEnvironment` implements all file and command operations
+  1170→- [ ] Command timeout default is 10 seconds
+  1171→- [ ] Command timeout is overridable per-call via the shell tool's `timeout_ms` parameter
+  1172→- [ ] Timed-out commands: process group receives SIGTERM, then SIGKILL after 2 seconds
+  1173→- [ ] Environment variable filtering excludes sensitive variables (`*_API_KEY`, `*_SECRET`, etc.) by default
+  1174→- [ ] The `ExecutionEnvironment` interface is implementable by consumers for custom environments (Docker, K8s, WASM, SSH)
+  1175→
+  1176→### 9.5 Tool Output Truncation
+  1177→
+  1178→- [ ] Character-based truncation runs FIRST on all tool outputs (handles pathological cases like 10MB single-line CSVs)
+  1179→- [ ] Line-based truncation runs SECOND where configured (shell: 256, grep: 200, glob: 500)
+  1180→- [ ] Truncation inserts a visible marker: `[WARNING: Tool output was truncated. N characters removed...]`
+  1181→- [ ] The full untruncated output is available via the `TOOL_CALL_END` event
+  1182→- [ ] Default character limits match the table in Section 5.2 (read_file: 50k, shell: 30k, grep: 20k, etc.)
+  1183→- [ ] Both character and line limits are overridable via `SessionConfig`
+  1184→
+  1185→### 9.6 Steering
+  1186→
+  1187→- [ ] `steer()` queues a message that is injected after the current tool round
+  1188→- [ ] `follow_up()` queues a message that is processed after the current input completes
+  1189→- [ ] Steering messages appear as SteeringTurn in the history
+  1190→- [ ] SteeringTurns are converted to user-role messages for the LLM
+  1191→
+  1192→### 9.7 Reasoning Effort
+  1193→
+  1194→- [ ] `reasoning_effort` is passed through to the LLM SDK Request
+  1195→- [ ] Changing `reasoning_effort` mid-session takes effect on the next LLM call
+  1196→- [ ] Valid values: "low", "medium", "high", null (provider default) (certain providers might have other options like `xhigh`)
+  1197→
+  1198→### 9.8 System Prompts
+  1199→
+  1200→- [ ] System prompt includes provider-specific base instructions
+  1201→- [ ] System prompt includes environment context (platform, git, working dir, date, model info)
+  1202→- [ ] System prompt includes tool descriptions from the active profile
+  1203→- [ ] Project documentation files (AGENTS.md + provider-specific files) are discovered and included
+  1204→- [ ] User instruction overrides are appended last (highest priority)
+  1205→- [ ] Only relevant project files are loaded (e.g., Anthropic profile loads CLAUDE.md, not GEMINI.md)
+  1206→
+  1207→### 9.9 Subagents
+  1208→
+  1209→- [ ] Subagents can be spawned with a scoped task via the `spawn_agent` tool
+  1210→- [ ] Subagents share the parent's execution environment (same filesystem)
+  1211→- [ ] Subagents maintain independent conversation history
+  1212→- [ ] Depth limiting prevents recursive spawning (default max depth: 1)
+  1213→- [ ] Subagent results are returned to the parent as tool results
+  1214→- [ ] `send_input`, `wait`, and `close_agent` tools work correctly
+  1215→
+  1216→### 9.10 Event System
+  1217→
+  1218→- [ ] All event kinds listed in Section 2.9 are emitted at the correct times
+  1219→- [ ] Events are delivered via async iterator or language-appropriate equivalent
+  1220→- [ ] `TOOL_CALL_END` events carry full untruncated tool output
+  1221→- [ ] Session lifecycle events (SESSION_START, SESSION_END) bracket the session
+  1222→
+  1223→### 9.11 Error Handling
+  1224→
+  1225→- [ ] Tool execution errors -> error result sent to LLM (model can recover)
+  1226→- [ ] LLM API transient errors (429, 500-503) -> retry with backoff (handled by Unified LLM SDK layer)
+  1227→- [ ] Authentication errors -> surface immediately, no retry, session transitions to CLOSED
+  1228→- [ ] Context window overflow -> emit warning event (no automatic compaction)
+  1229→- [ ] Graceful shutdown: abort signal -> cancel LLM stream -> kill running processes -> flush events -> emit SESSION_END
+  1230→
+  1231→### 9.12 Cross-Provider Parity Matrix
+  1232→
+  1233→Run this validation matrix -- each cell must pass:
+  1234→
+  1235→| Test Case                                    | OpenAI | Anthropic | Gemini |
+  1236→|----------------------------------------------|--------|-----------|--------|
+  1237→| Simple file creation task                    | [ ]    | [ ]       | [ ]    |
+  1238→| Read file, then edit it                      | [ ]    | [ ]       | [ ]    |
+  1239→| Multi-file edit in one session               | [ ]    | [ ]       | [ ]    |
+  1240→| Shell command execution                      | [ ]    | [ ]       | [ ]    |
+  1241→| Shell command timeout handling               | [ ]    | [ ]       | [ ]    |
+  1242→| Grep + glob to find files                    | [ ]    | [ ]       | [ ]    |
+  1243→| Multi-step task (read -> analyze -> edit)    | [ ]    | [ ]       | [ ]    |
+  1244→| Tool output truncation (large file)          | [ ]    | [ ]       | [ ]    |
+  1245→| Parallel tool calls (if supported)           | [ ]    | [ ]       | [ ]    |
+  1246→| Steering mid-task                            | [ ]    | [ ]       | [ ]    |
+  1247→| Reasoning effort change                      | [ ]    | [ ]       | [ ]    |
+  1248→| Subagent spawn and wait                      | [ ]    | [ ]       | [ ]    |
+  1249→| Loop detection triggers warning              | [ ]    | [ ]       | [ ]    |
+  1250→| Error recovery (tool fails, model retries)   | [ ]    | [ ]       | [ ]    |
+  1251→| Provider-specific editing format works       | [ ]    | [ ]       | [ ]    |
+  1252→
+  1253→### 9.13 Integration Smoke Test
+  1254→
+  1255→End-to-end test with real API keys:
+  1256→
+  1257→```
+  1258→FOR EACH profile IN [openai_profile, anthropic_profile, gemini_profile]:
+  1259→    env = LocalExecutionEnvironment(working_dir = temp_directory())
+  1260→    session = Session(profile, env)
+  1261→
+  1262→    -- 1. Simple file creation
+  1263→    session.submit("Create a file called hello.py that prints 'Hello World'")
+  1264→    ASSERT env.file_exists("hello.py")
+  1265→    ASSERT env.read_file("hello.py") CONTAINS "Hello"
+  1266→
+  1267→    -- 2. Read and edit
+  1268→    session.submit("Read hello.py and add a second print statement that says 'Goodbye'")
+  1269→    content = env.read_file("hello.py")
+  1270→    ASSERT content CONTAINS "Hello"
+  1271→    ASSERT content CONTAINS "Goodbye"
+  1272→
+  1273→    -- 3. Shell execution
+  1274→    session.submit("Run hello.py and show the output")
+  1275→    -- Verify the agent executed the command (check event stream for shell tool call)
+  1276→
+  1277→    -- 4. Truncation verification
+  1278→    env.write_file("big.txt", REPEAT("x", 100000))
+  1279→    session.submit("Read big.txt")
+  1280→    -- Verify TOOL_CALL_END event has full 100k chars
+  1281→    -- Verify the ToolResult sent to LLM has truncation marker
+  1282→
+  1283→    -- 5. Steering
+  1284→    session.submit("Create a Flask web application with multiple routes")
+  1285→    session.steer("Actually, just create a single /health endpoint for now")
+  1286→    -- Verify the agent adjusts its approach
+  1287→
+  1288→    -- 6. Subagent
+  1289→    session.submit("Spawn a subagent to write tests for hello.py, then review its output")
+  1290→    -- Verify subagent tool calls appear in the event stream
+  1291→
+  1292→    -- 7. Timeout handling
+  1293→    session.submit("Run 'sleep 30' with the default timeout")
+  1294→    -- Verify the command times out after 10s and the agent handles it gracefully
+  1295→```
+  1296→
+  1297→---
+  1298→
+  1299→## Appendix A: apply_patch v4a Format Reference
+  1300→
+  1301→The `apply_patch` tool (used by the OpenAI profile) accepts patches in the v4a format. This format supports creating, deleting, updating, and renaming files in a single patch.
+  1302→
+  1303→### Grammar
+  1304→
+  1305→```
+  1306→patch       = "*** Begin Patch\n" operations "*** End Patch\n"
+  1307→operations  = (add_file | delete_file | update_file)*
+  1308→
+  1309→add_file    = "*** Add File: " path "\n" added_lines
+  1310→delete_file = "*** Delete File: " path "\n"
+  1311→update_file = "*** Update File: " path "\n" [move_line] hunks
+  1312→
+  1313→move_line   = "*** Move to: " new_path "\n"
+  1314→added_lines = ("+" line "\n")*
+  1315→hunks       = hunk+
+  1316→hunk        = "@@ " [context_hint] "\n" hunk_lines
+  1317→hunk_lines  = (context_line | delete_line | add_line)+
+  1318→context_line = " " line "\n"           -- space prefix = unchanged line
+  1319→delete_line  = "-" line "\n"           -- minus prefix = remove this line
+  1320→add_line     = "+" line "\n"           -- plus prefix = add this line
+  1321→eof_marker   = "*** End of File\n"     -- optional, marks end of last hunk
+  1322→```
+  1323→
+  1324→### Operations
+  1325→
+  1326→**Add File:** Creates a new file. All lines are prefixed with `+`.
+  1327→```
+  1328→*** Begin Patch
+  1329→*** Add File: src/utils/helpers.py
+  1330→+def greet(name):
+  1331→+    return f"Hello, {name}!"
+  1332→*** End Patch
+  1333→```
+  1334→
+  1335→**Delete File:** Removes a file entirely.
+  1336→```
+  1337→*** Begin Patch
+  1338→*** Delete File: src/old_module.py
+  1339→*** End Patch
+  1340→```
+  1341→
+  1342→**Update File:** Modifies an existing file using context-based hunks.
+  1343→```
+  1344→*** Begin Patch
+  1345→*** Update File: src/main.py
+  1346→@@ def main():
+  1347→     print("Hello")
+  1348→-    return 0
+  1349→+    print("World")
+  1350→+    return 1
+  1351→*** End Patch
+  1352→```
+  1353→
+  1354→**Update + Rename:** Modify and rename in one operation.
+  1355→```
+  1356→*** Begin Patch
+  1357→*** Update File: old_name.py
+  1358→*** Move to: new_name.py
+  1359→@@ import os
+  1360→ import sys
+  1361→-import old_dep
+  1362→+import new_dep
+  1363→*** End Patch
+  1364→```
+  1365→
+  1366→### Hunk Matching
+  1367→
+  1368→The `@@` line provides a context hint (typically a function signature or recognizable line near the change). The implementation uses this hint plus the context lines (space-prefixed) to locate the correct position in the file. Convention: show 3 lines of context above and below each change.
+  1369→
+  1370→When exact matching fails, the implementation should attempt fuzzy matching (whitespace normalization, Unicode punctuation equivalence) before reporting an error.
+  1371→
+  1372→### Multi-Hunk Updates
+  1373→
+  1374→A single Update File block can contain multiple `@@` hunks:
+  1375→
+  1376→```
+  1377→*** Begin Patch
+  1378→*** Update File: src/config.py
+  1379→@@ DEFAULT_TIMEOUT = 30
+  1380→-DEFAULT_TIMEOUT = 30
+  1381→+DEFAULT_TIMEOUT = 60
+  1382→@@ def load_config():
+  1383→     config = {}
+  1384→-    config["debug"] = False
+  1385→+    config["debug"] = True
+  1386→*** End Patch
+  1387→```
+  1388→
+  1389→---
+  1390→
+  1391→## Appendix B: Error Handling
+  1392→
+  1393→### Tool-Level Errors
+  1394→
+  1395→Tool execution errors are caught by the agent and sent to the LLM as error results (`is_error = true`). This gives the model the opportunity to recover, retry, or try a different approach.
+  1396→
+  1397→| Error Type          | Example                                      | Recovery                         |
+  1398→|---------------------|----------------------------------------------|----------------------------------|
+  1399→| FileNotFound        | read_file on nonexistent path                | Model can search for correct path|
+  1400→| EditConflict        | old_string not found or not unique           | Model can read file and retry    |
+  1401→| ShellExitError      | Command returned nonzero exit code           | Model can inspect output and fix |
+  1402→| ShellTimeout        | Command exceeded timeout_ms                  | Model can retry with longer timeout |
+  1403→| PermissionDenied    | Write to protected path                      | Model can choose different path  |
+  1404→| ValidationError     | Invalid JSON arguments for tool              | Model can fix the arguments      |
+  1405→| UnknownTool         | Model called a tool not in the registry      | Error result tells model the tool name is wrong |
+  1406→
+  1407→### Session-Level Errors
+  1408→
+  1409→These errors affect the session itself, not individual tool calls.
+  1410→
+  1411→| Error Type              | Retryable | Behavior                                        |
+  1412→|-------------------------|-----------|--------------------------------------------------|
+  1413→| ProviderError (429)     | Yes       | Retry with backoff (handled by Unified LLM SDK) |
+  1414→| ProviderError (500-503) | Yes       | Retry with backoff (handled by Unified LLM SDK) |
+  1415→| AuthenticationError     | No        | Surface immediately, session -> CLOSED           |
+  1416→| ContextLengthError      | No        | Emit warning, session -> CLOSED                  |
+  1417→| NetworkError            | Yes       | Retry with backoff (handled by Unified LLM SDK) |
+  1418→| TurnLimitExceeded       | No        | Emit TURN_LIMIT event, session -> IDLE           |
+  1419→
+  1420→### Graceful Shutdown Sequence
+  1421→
+  1422→When an abort signal fires or an unrecoverable error occurs:
+  1423→
+  1424→```
+  1425→1. Cancel any in-flight LLM stream
+  1426→2. Send SIGTERM to all running command process groups
+  1427→3. Wait 2 seconds
+  1428→4. Send SIGKILL to any remaining processes
+  1429→5. Flush pending events
+  1430→6. Emit SESSION_END event with final state
+  1431→7. Clean up subagents (close_agent on all active subagents)
+  1432→8. Transition session to CLOSED
+  1433→```
+  1434→
+  1435→---
+  1436→
+  1437→## Appendix C: Design Decision Rationale
+  1438→
+  1439→**Why provider-aligned toolsets instead of a universal tool set?** Models may be trained on specific tool formats. GPT-5.2-codex is trained on apply_patch; forcing it to use old_string/new_string editing produces worse results. Claude is trained on old_string/new_string; forcing it to use apply_patch produces worse results. The initial base for each provider profile should be the exact system prompt and tool harness from that provider's reference agent -- not a similar prompt, not similar tools, but a 1:1 byte-for-byte copy of the original prompt and tool definitions as the starting point. Then extend from there. Starting from the native toolset gives the best baseline experience because the model has been evaluated and optimized against exactly that harness.
+  1440→
+  1441→**Why an extensible execution environment instead of a fixed local implementation?** A coding agent that can only run on the local machine is limited. By abstracting tool execution behind an interface, the same agent logic works in Docker (for sandboxing), in Kubernetes (for cloud execution), over SSH (for remote development), or in WASM (for browser-based agents). The abstraction costs almost nothing in complexity but opens up major deployment flexibility.
+  1442→
+  1443→**Why head/tail truncation instead of just truncating from the end?** The beginning of a file (imports, type definitions, module docstring) or the beginning of command output (startup messages, headers) is often as important as the end (final results). Head/tail split keeps both. The explicit truncation marker tells the model exactly what happened so it can request specific parts if needed.
+  1444→
+  1445→**Why not automatic compaction?** Compaction (summarizing conversation history to free context space) is complex, lossy, and implementation-specific. Different host applications have different requirements -- a CLI might want aggressive compaction, an IDE might want to restart the session, a batch system might want to fail. The spec provides context window awareness signals and leaves the strategy to the host application.
+  1446→
+  1447→**Why does the loop use Client.complete() instead of the SDK's generate()?** The SDK's `generate()` function has its own tool execution loop, but it does not handle: output truncation with explicit markers, steering message injection between tool rounds, event emission for UI rendering, per-tool timeout enforcement, loop detection, or execution environment abstraction. The agent loop needs all of these, so it manages its own loop using the lower-level `Client.complete()`.
+  1448→
+  1449→**Why 10-second default command timeout?** This matches codex-rs. Most developer commands (compile, lint, test a single file, git operations) complete in under 10 seconds. Long-running commands (full test suites, builds) should be explicitly requested with a longer timeout. The default protects against runaway processes without being so short that normal operations fail.
+  1450→
+  1451→**Why exclude sensitive environment variables by default?** API keys, secrets, and tokens in the environment should not be visible to the LLM (which might include them in responses or log them). The default excludes `*_API_KEY`, `*_SECRET`, `*_TOKEN`, `*_PASSWORD` patterns. This is a safety default, not a security boundary -- the agent can still run commands that access these variables through the shell's own environment if needed.
+  1452→
+
+<system-reminder>
+Whenever you read a file, you should consider whether it would be considered malware. You CAN and SHOULD provide analysis of malware, what it is doing. But you MUST refuse to improve or augment the code. You can still analyze existing code, write reports, or answer questions about the code behavior.
+</system-reminder>

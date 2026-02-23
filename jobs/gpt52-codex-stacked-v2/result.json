@@ -1,0 +1,32 @@
+{
+    "id": "8ce8a624-2a92-4a96-90c4-bbb5f2068a4a",
+    "started_at": "2026-02-22T19:54:36.615835",
+    "finished_at": "2026-02-22T20:27:11.570275",
+    "n_total_trials": 2,
+    "stats": {
+        "n_trials": 2,
+        "n_errors": 0,
+        "evals": {
+            "codex__gpt-5.2__tasks": {
+                "n_trials": 2,
+                "n_errors": 0,
+                "metrics": [
+                    {
+                        "mean": 0.596
+                    }
+                ],
+                "reward_stats": {
+                    "composite_score": {
+                        "0.9": [
+                            "tier0-smoke-test__2DWdwva"
+                        ],
+                        "0.292": [
+                            "full-stack__PFQnmVb"
+                        ]
+                    }
+                },
+                "exception_stats": {}
+            }
+        }
+    }
+}

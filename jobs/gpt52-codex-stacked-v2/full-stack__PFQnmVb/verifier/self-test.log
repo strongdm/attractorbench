@@ -1,0 +1,7 @@
+=== Phase 2: Self-test ===
+CGO_ENABLED=0 go test ./...
+?   	attractorbench/cmd/conformance	[no test files]
+ok  	attractorbench/pkg/agent	(cached)
+ok  	attractorbench/pkg/attractor	(cached)
+ok  	attractorbench/pkg/llmsdk	(cached)
+Self-test exit code: 0

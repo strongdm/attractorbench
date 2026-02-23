@@ -1,0 +1,23 @@
+=== Phase 0: Harvest LiteLLM metrics ===
+=== Phase 1: Build ===
+Build exit code: 0
+=== Phase 2: Self-test ===
+Self-test exit code: 0
+=== Phase 3: Conformance ===
+Conformance exit code: 0
+{
+  "build_success": 1,
+  "self_test_pass_rate": 0.0,
+  "self_test_count": 1,
+  "test_runner_detected": true,
+  "conformance_exit": 0,
+  "conformance_total": 6,
+  "conformance_passed": 6,
+  "conformance_pass_rate": 1.0,
+  "dod_plumbing": 1.0,
+  "composite_score": 0.9
+}
+=== Done ===
+{
+  "composite_score": 0.9
+}

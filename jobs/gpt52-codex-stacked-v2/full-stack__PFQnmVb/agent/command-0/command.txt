@@ -1,0 +1,9 @@
+
+mkdir -p /tmp/codex-secrets
+cat >/tmp/codex-secrets/auth.json <<EOF
+{
+  "OPENAI_API_KEY": "${OPENAI_API_KEY}"
+}
+EOF
+ln -sf /tmp/codex-secrets/auth.json "$CODEX_HOME/auth.json"
+                

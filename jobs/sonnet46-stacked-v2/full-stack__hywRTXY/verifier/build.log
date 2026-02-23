@@ -1,0 +1,21 @@
+=== Phase 1: Build ===
+pip install -r requirements.txt
+Requirement already satisfied: httpx>=0.27.0 in /usr/local/lib/python3.12/site-packages (from -r requirements.txt (line 1)) (0.28.1)
+Requirement already satisfied: pytest>=8.0.0 in /usr/local/lib/python3.12/site-packages (from -r requirements.txt (line 2)) (9.0.2)
+Requirement already satisfied: pytest-asyncio>=0.23.0 in /usr/local/lib/python3.12/site-packages (from -r requirements.txt (line 3)) (1.3.0)
+Requirement already satisfied: anyio in /usr/local/lib/python3.12/site-packages (from httpx>=0.27.0->-r requirements.txt (line 1)) (4.12.1)
+Requirement already satisfied: certifi in /usr/local/lib/python3.12/site-packages (from httpx>=0.27.0->-r requirements.txt (line 1)) (2026.1.4)
+Requirement already satisfied: httpcore==1.* in /usr/local/lib/python3.12/site-packages (from httpx>=0.27.0->-r requirements.txt (line 1)) (1.0.9)
+Requirement already satisfied: idna in /usr/local/lib/python3.12/site-packages (from httpx>=0.27.0->-r requirements.txt (line 1)) (3.11)
+Requirement already satisfied: h11>=0.16 in /usr/local/lib/python3.12/site-packages (from httpcore==1.*->httpx>=0.27.0->-r requirements.txt (line 1)) (0.16.0)
+Requirement already satisfied: iniconfig>=1.0.1 in /usr/local/lib/python3.12/site-packages (from pytest>=8.0.0->-r requirements.txt (line 2)) (2.3.0)
+Requirement already satisfied: packaging>=22 in /usr/local/lib/python3.12/site-packages (from pytest>=8.0.0->-r requirements.txt (line 2)) (26.0)
+Requirement already satisfied: pluggy<2,>=1.5 in /usr/local/lib/python3.12/site-packages (from pytest>=8.0.0->-r requirements.txt (line 2)) (1.6.0)
+Requirement already satisfied: pygments>=2.7.2 in /usr/local/lib/python3.12/site-packages (from pytest>=8.0.0->-r requirements.txt (line 2)) (2.19.2)
+Requirement already satisfied: typing-extensions>=4.12 in /usr/local/lib/python3.12/site-packages (from pytest-asyncio>=0.23.0->-r requirements.txt (line 3)) (4.15.0)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 25.0.1 -> 26.0.1
+[notice] To update, run: pip install --upgrade pip
+chmod +x bin/conformance
+Build exit code: 0

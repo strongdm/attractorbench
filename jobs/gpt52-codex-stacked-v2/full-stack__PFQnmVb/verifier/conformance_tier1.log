@@ -1,0 +1,60 @@
+=== Phase 3a: Tier 1 Conformance ===
+
+Conformance Results: 8/28 passed
+  [PASS] build_check: make build succeeds
+  [PASS] client_from_env: Client construction from env vars
+  [PASS] list_models: list-models returns JSON array
+  [FAIL] complete_request: complete returns valid Response JSON
+         Error: Invalid JSON response: 
+  [FAIL] stream_request: stream returns newline-delimited JSON events
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] tool_call: Tool calling returns tool_call in response
+         Error: Invalid JSON: 
+  [FAIL] generate_object: generate-object returns parsed structured output
+         Error: Invalid JSON: 
+  [FAIL] anthropic_complete: Anthropic adapter complete works
+         Error: Invalid JSON: 
+  [PASS] multimodal_message: Multimodal messages accepted
+  [PASS] error_handling: Errors surfaced with error key or non-zero exit
+  [PASS] client_from_env_missing_key: Unset API keys must exit non-zero
+  [FAIL] provider_routing_openai: provider=openai hits /v1/responses
+         Error: OpenAI provider did not hit /v1/responses or /v1/chat/completions
+  [FAIL] provider_routing_anthropic: provider=anthropic hits /messages
+         Error: Anthropic provider did not hit /messages endpoint
+  [FAIL] default_provider_fallback: No provider field still succeeds
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] stream_event_types: Stream events include delta and terminal type
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] stream_text_concat: Concatenated delta text is non-empty string
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] generate_object_schema: generate-object attempts schema fields; mock called
+         Error: Invalid JSON: 
+  [FAIL] tool_call_name_match: Tool call name is get_weather
+         Error: Invalid JSON: 
+  [FAIL] tool_call_args_valid: Tool call arguments have location key
+         Error: Invalid JSON: 
+  [FAIL] anthropic_tool_call: Tool call with provider=anthropic; hits /messages
+         Error: Invalid JSON: 
+  [FAIL] anthropic_stream: Stream with provider=anthropic returns events
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] gemini_complete: Complete with provider=gemini; hits generateContent
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [PASS] rate_limit_handling: Rate limited endpoint does not crash silently
+  [PASS] auth_error_handling: Auth error returns immediately with error
+  [FAIL] text_only_message: Simple string content works
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] tool_result_roundtrip: Tool calls + tool results in history
+         Error: json: cannot unmarshal string into Go struct field Message.messages.content of type []llmsdk.ContentPart
+
+  [FAIL] complete_response_id: Response id field is a non-empty string
+         Error: Invalid JSON: 
+  [FAIL] complete_usage_fields: Response has usage with token count fields
+         Error: Invalid JSON: 
+Tier 1 conformance exit code: 0

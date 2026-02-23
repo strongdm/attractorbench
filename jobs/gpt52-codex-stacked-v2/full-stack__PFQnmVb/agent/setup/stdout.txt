@@ -1,0 +1,55 @@
+Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+Get:2 https://deb.nodesource.com/node_22.x nodistro InRelease [12.1 kB]
+Get:3 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+Get:4 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+Get:5 https://deb.nodesource.com/node_22.x nodistro/main arm64 Packages [9049 B]
+Get:6 http://deb.debian.org/debian trixie/main arm64 Packages [9607 kB]
+Get:7 http://deb.debian.org/debian trixie-updates/main arm64 Packages [5404 B]
+Get:8 http://deb.debian.org/debian-security trixie-security/main arm64 Packages [113 kB]
+Fetched 9978 kB in 2s (5105 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+curl is already the newest version (8.14.1-2+deb13u2).
+0 upgraded, 0 newly installed, 0 to remove and 0 not upgraded.
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 16631  100 16631    0     0   217k      0 --:--:-- --:--:-- --:--:--  219k
+=> Downloading nvm from git to '/root/.nvm'
+=> Cloning into '/root/.nvm'...
+* (HEAD detached at FETCH_HEAD)
+  master
+=> Compressing and cleaning up git repository
+
+=> Appending nvm source string to /root/.bashrc
+=> Appending bash_completion source string to /root/.bashrc
+=> You currently have modules installed globally with `npm`. These will no
+=> longer be linked to the active version of Node when you install a new node
+=> with `nvm`; and they may (depending on how you construct your `$PATH`)
+=> override the binaries of modules installed with `nvm`:
+
+/usr/lib
+├── corepack@0.34.0
+=> If you wish to uninstall them at a later point (or re-install them under your
+=> `nvm` node installs), you can remove them from the system Node as follows:
+
+     $ nvm use system
+     $ npm uninstall -g a_module
+
+=> Close and reopen your terminal to start using nvm or run the following to use it now:
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+Downloading and installing node v22.22.0...
+Downloading https://nodejs.org/dist/v22.22.0/node-v22.22.0-linux-arm64.tar.xz...
+#=#=#                                                                                                                                                     0.1%#                                                                          2.5%####                                                                       6.6%#########                                                                 13.3%#############                                                             19.4%###################                                                       26.5%########################                                                  34.2%#############################                                             41.3%##############################                                            42.7%#####################################                                     52.0%###########################################                               59.7%################################################                          67.8%######################################################                    76.2%########################################################                  78.5%##############################################################            87.4%#####################################################################     96.2%######################################################################## 100.0%
+Computing checksum with sha256sum
+Checksums matched!
+Now using node v22.22.0 (npm v10.9.4)
+Creating default alias: default -> 22 (-> v22.22.0 *)
+10.9.4
+
+added 2 packages in 3s
+codex-cli 0.104.0
