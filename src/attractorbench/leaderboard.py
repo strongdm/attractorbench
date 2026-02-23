@@ -16,6 +16,21 @@ from attractorbench.scoring import RewardData, load_job_results
 
 logger = logging.getLogger(__name__)
 
+_CANONICAL_TASKS = {
+    "tier0-smoke-test",
+    "tier1-unified-llm",
+    "tier2-agent-loop",
+    "tier3-attractor",
+    "full-stack",
+}
+
+
+def _is_curriculum_task_name(task_name: str) -> bool:
+    base = task_name.split("#", 1)[0]
+    if base in _CANONICAL_TASKS:
+        return False
+    return base.startswith("tier1-") or base.startswith("tier2-") or base.startswith("tier3-")
+
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
@@ -164,6 +179,16 @@ def load_harbor_metrics(job_dir: Path) -> RunMetadata | None:
         or first.get("agent_info", {}).get("model_info", {}).get("name", "")
     )
     display_model = _resolve_model_name(raw_model)
+    effort = (
+        first.get("config", {}).get("agent", {}).get("kwargs", {}).get("reasoning_effort")
+        or ""
+    )
+    bench_version = (
+        first.get("config", {}).get("benchmark_version")
+        or first.get("config", {}).get("task", {}).get("benchmark_version")
+        or first.get("benchmark_version")
+        or ""
+    )
 
     # --- Aggregate across trials ---
     total_prompt = 0
@@ -226,6 +251,8 @@ def load_harbor_metrics(job_dir: Path) -> RunMetadata | None:
         return RunMetadata(
             agent=agent_name,
             model=display_model,
+            bench_version=bench_version,
+            effort=effort,
             wall_seconds=total_wall if total_wall > 0 else None,
         )
 
@@ -241,6 +268,8 @@ def load_harbor_metrics(job_dir: Path) -> RunMetadata | None:
     return RunMetadata(
         agent=agent_name,
         model=display_model,
+        bench_version=bench_version,
+        effort=effort,
         total_tokens=total_tokens,
         prompt_tokens=total_prompt,
         completion_tokens=total_completion,
@@ -299,12 +328,16 @@ SORT_COLUMNS = {
 }
 
 
-def build_leaderboard(job_dirs: list[Path]) -> Leaderboard:
+def build_leaderboard(job_dirs: list[Path], *, include_curriculum: bool = False) -> Leaderboard:
     """Build a leaderboard from one or more job directories."""
     entries: list[LeaderboardEntry] = []
 
     for job_dir in job_dirs:
-        results = load_job_results(job_dir)
+        all_results = load_job_results(job_dir)
+        if include_curriculum:
+            results = all_results
+        else:
+            results = {k: v for k, v in all_results.items() if not _is_curriculum_task_name(k)}
         if not results:
             logger.debug("No reward.json files found in %s, skipping", job_dir)
             continue
@@ -522,8 +555,10 @@ def build_run_log(job_dirs: list[Path]) -> list[RunLogEntry]:
         entries.append(
             RunLogEntry(
                 job_name=job_dir.name,
+                bench_version=metadata.bench_version if metadata else "",
                 agent=metadata.agent if metadata else job_dir.name,
                 model=metadata.model if metadata else "",
+                effort=metadata.effort if metadata else "",
                 tasks=count,
                 avg_composite=avg_composite,
                 total_tokens=metadata.total_tokens if metadata else None,
@@ -541,8 +576,10 @@ def render_run_log_table(entries: list[RunLogEntry], console: Console) -> None:
     """Render the run log as a Rich table."""
     table = Table(title="Run Log")
     table.add_column("Run", style="bold")
+    table.add_column("Bench Ver")
     table.add_column("Agent")
     table.add_column("Model")
+    table.add_column("Effort")
     table.add_column("Tasks", justify="right")
     table.add_column("Score", justify="right", style="bold")
     table.add_column("Tokens", justify="right")
@@ -554,8 +591,10 @@ def render_run_log_table(entries: list[RunLogEntry], console: Console) -> None:
     for e in entries:
         table.add_row(
             e.job_name,
+            e.bench_version or "unknown",
             e.agent,
             e.model,
+            e.effort or "unknown",
             str(e.tasks),
             f"{e.avg_composite:.3f}",
             fmt_tokens(e.total_tokens),
@@ -575,13 +614,13 @@ def render_run_log_markdown(entries: list[RunLogEntry]) -> str:
         "",
         "Per-job benchmark run history with scores, token usage, and cost.",
         "",
-        "| Run | Agent | Model | Tasks | Score | Tokens | Time | Tool Calls | Cost | Date |",
-        "|-----|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|------|",
+        "| Run | Bench Version | Agent | Model | Effort | Tasks | Score | Tokens | Time | Tool Calls | Cost | Date |",
+        "|-----|---------------|-------|-------|--------|------:|------:|-------:|-----:|-----------:|-----:|------|",
     ]
     for e in entries:
         tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
         lines.append(
-            f"| {e.job_name} | {e.agent} | {e.model} "
+            f"| {e.job_name} | {e.bench_version or 'unknown'} | {e.agent} | {e.model} | {e.effort or 'unknown'} "
             f"| {e.tasks} | {e.avg_composite:.3f} "
             f"| {fmt_tokens(e.total_tokens)} | {fmt_time(e.wall_seconds)} "
             f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "

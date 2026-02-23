@@ -1,0 +1,20 @@
+{
+  "mappings": [
+    {
+      "dest_path": "specs/unified-llm-spec.md",
+      "source_path": "unified-llm-spec.md"
+    },
+    {
+      "dest_path": "specs/coding-agent-loop-spec.md",
+      "source_path": "coding-agent-loop-spec.md"
+    },
+    {
+      "dest_path": "specs/attractor-spec.md",
+      "source_path": "attractor-spec.md"
+    }
+  ],
+  "ref": "2f892efd63ee7c11f038856b90aae57c067b77c2",
+  "requested_ref": "2f892efd63ee7c11f038856b90aae57c067b77c2",
+  "synced_at": "2026-02-23T21:56:52Z",
+  "upstream_repo": "https://github.com/strongdm/attractor.git"
+}

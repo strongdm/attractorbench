@@ -20,4 +20,6 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 RUN mkdir -p /workspace /logs /logs/verifier /logs/agent /logs/artifacts /tests
 RUN chmod -R 777 /workspace /logs /tests
 
+COPY starter/ /workspace/
+
 WORKDIR /workspace

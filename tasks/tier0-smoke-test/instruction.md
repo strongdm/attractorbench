@@ -42,6 +42,26 @@ The mock LLM server runs at `http://localhost:9999` inside the test container. S
 
 ---
 
+## Recommended Loop (Do This Until Timeout)
+
+Run this loop repeatedly instead of stopping after the first failure:
+
+1. Implement a minimal end-to-end slice first (CLI + env parsing + one working command).
+2. Run quick conformance:
+   - `python3 /tests/conformance/run_conformance.py --tier 0 --suite quick`
+3. Read failures:
+   - `/logs/verifier/conformance_results.json`
+   - `/logs/verifier/conformance.log`
+4. Fix one failure class at a time (plumbing, JSON schema, provider routing, streaming, etc.).
+5. Repeat quick until mostly green, then run full:
+   - `python3 /tests/conformance/run_conformance.py --tier 0 --suite full`
+6. Keep iterating until timeout or all tests pass.
+
+Do not stop early. Use conformance output as the main feedback loop throughout the run.
+
+
+---
+
 ## Full Specification
 
 # Tier 0: Smoke Test

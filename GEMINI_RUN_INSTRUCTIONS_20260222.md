@@ -1,5 +1,7 @@
 # Gemini Run Instructions — 2026-02-22
 
+> **Superseded by [docs/runbook/gemini-cli.md](docs/runbook/gemini-cli.md).** This file is kept for historical context.
+
 ## Current State
 
 The stacked full-stack benchmark is working end-to-end. Infrastructure is solid.

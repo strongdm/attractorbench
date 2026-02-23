@@ -22,5 +22,6 @@ RUN chmod -R 777 /workspace /logs /tests
 
 # Copy tier specification files so the agent can read them at build time
 COPY specs/ /workspace/specs/
+COPY starter/ /workspace/
 
 WORKDIR /workspace

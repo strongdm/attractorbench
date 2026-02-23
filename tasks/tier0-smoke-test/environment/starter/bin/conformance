@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+echo "starter scaffold: ./bin/conformance is a stub. Implement required subcommands." >&2
+exit 2

@@ -1,4 +1,0 @@
-=== Phase 0: Harvest LiteLLM metrics ===
-Harvesting LiteLLM metrics from /logs/litellm/proxy.log
-  No usage data found in proxy log (metrics will be null)
-  Wrote /logs/verifier/metadata.json

@@ -10,6 +10,7 @@ services:
     environment:
       - OPENAI_BASE_URL=http://litellm:4000/v1
       - ANTHROPIC_BASE_URL=http://litellm:4000/anthropic
+      - GOOGLE_GEMINI_BASE_URL=http://litellm:4000/gemini
     volumes:
       - litellm-logs:/logs/litellm
 

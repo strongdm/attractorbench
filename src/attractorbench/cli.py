@@ -39,6 +39,7 @@ def generate(
     tiers: Annotated[Optional[str], typer.Option(help="Comma-separated tier numbers (e.g. 1,2,3)")] = None,
     output_dir: Annotated[Path, typer.Option(help="Output directory for task dirs")] = Path("tasks"),
     individual: Annotated[bool, typer.Option("--individual", help="Generate tiers as separate tasks instead of stacked full-stack")] = False,
+    curriculum: Annotated[bool, typer.Option("--curriculum", help="Also generate optional curriculum subtier tasks")] = False,
 ) -> None:
     """Generate Harbor-compatible task directories from specs."""
     from attractorbench.adapter import generate_tasks
@@ -51,7 +52,7 @@ def generate(
         raise typer.BadParameter(str(exc), param_hint="--tiers") from exc
 
     console.print(f"Generating tasks for {len(tier_defs)} tier(s)...")
-    generated = generate_tasks(tier_defs, output_dir, stacked=not individual)
+    generated = generate_tasks(tier_defs, output_dir, stacked=not individual, curriculum=curriculum)
 
     for slug in generated:
         task_dir = output_dir / slug
@@ -65,6 +66,8 @@ def generate(
             tier = next((t for t in tier_defs if t.slug == slug), None)
             if tier:
                 console.print(f"  [green]✓[/green] {slug}/ ({tier.total_items} DoD items, {tier.agent_timeout}s timeout)")
+            else:
+                console.print(f"  [green]✓[/green] {slug}/")
 
     console.print(f"\nTasks written to [bold]{output_dir}[/bold]")
 
@@ -217,6 +220,7 @@ def compare(
 def leaderboard(
     job_dirs: Annotated[list[Path], typer.Argument(help="Paths to Harbor job directories")],
     sort: Annotated[str, typer.Option(help="Sort column: composite, cost, tokens, time, efficiency")] = "composite",
+    include_curriculum: Annotated[bool, typer.Option("--include-curriculum", help="Include curriculum subtier tasks in rankings")] = False,
     markdown: Annotated[bool, typer.Option("--markdown", help="Output markdown table")] = False,
     json_output: Annotated[bool, typer.Option("--json", help="Output JSON")] = False,
 ) -> None:
@@ -239,7 +243,7 @@ def leaderboard(
         console.print(f"[red]Invalid sort column: {sort}. Choose from: {', '.join(SORT_COLUMNS)}[/red]")
         raise typer.Exit(1)
 
-    lb = build_leaderboard(job_dirs)
+    lb = build_leaderboard(job_dirs, include_curriculum=include_curriculum)
 
     if not lb.entries:
         console.print("[red]No results found in any job directory[/red]")

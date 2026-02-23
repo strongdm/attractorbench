@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from attractorbench.tiers import StackedTierDef, TierDef, load_stacked_tier, load_tiers
@@ -46,6 +47,7 @@ def generate_instruction(tier: TierDef) -> str:
         dod_checklist += f"\n### {section.number} {section.name}\n\n"
         for item in section.items:
             dod_checklist += f"- [ ] {item.text}\n"
+    recommended_loop = _recommended_loop_for_tier(tier.tier)
 
     return f"""# {tier.name} — attractorbench Tier {tier.tier}
 
@@ -73,9 +75,33 @@ Read the specification below and implement a complete, working system that satis
 
 ---
 
+{recommended_loop}
+
+---
+
 ## Full Specification
 
 {spec_text}
+"""
+
+
+def _recommended_loop_for_tier(tier: int) -> str:
+    return f"""## Recommended Loop (Do This Until Timeout)
+
+Run this loop repeatedly instead of stopping after the first failure:
+
+1. Implement a minimal end-to-end slice first (CLI + env parsing + one working command).
+2. Run quick conformance:
+   - `python3 /tests/conformance/run_conformance.py --tier {tier} --suite quick`
+3. Read failures:
+   - `/logs/verifier/conformance_results.json`
+   - `/logs/verifier/conformance.log`
+4. Fix one failure class at a time (plumbing, JSON schema, provider routing, streaming, etc.).
+5. Repeat quick until mostly green, then run full:
+   - `python3 /tests/conformance/run_conformance.py --tier {tier} --suite full`
+6. Keep iterating until timeout or all tests pass.
+
+Do not stop early. Use conformance output as the main feedback loop throughout the run.
 """
 
 
@@ -155,11 +181,13 @@ ENV PATH="/usr/local/go/bin:${{PATH}}"
 RUN mkdir -p /workspace /logs /logs/verifier /logs/agent /logs/artifacts /tests
 RUN chmod -R 777 /workspace /logs /tests
 
+COPY starter/ /workspace/
+
 WORKDIR /workspace
 """
 
 
-def generate_test_sh(tier: TierDef) -> str:
+def generate_test_sh(tier: TierDef, *, suite: str = "full") -> str:
     return f"""#!/bin/bash
 # attractorbench Tier {tier.tier}: {tier.name} — Verifier
 set -uo pipefail
@@ -216,7 +244,7 @@ export ANTHROPIC_API_KEY=test-key
 export ANTHROPIC_BASE_URL=http://localhost:9999
 export GEMINI_API_KEY=test-key
 export GEMINI_BASE_URL=http://localhost:9999
-python3 /tests/conformance/run_conformance.py --tier {tier.tier} >> /logs/verifier/conformance.log 2>&1
+python3 /tests/conformance/run_conformance.py --tier {tier.tier} --suite {suite} >> /logs/verifier/conformance.log 2>&1
 CONFORMANCE_EXIT=$?
 echo "Conformance exit code: $CONFORMANCE_EXIT" | tee -a /logs/verifier/conformance.log
 
@@ -652,6 +680,7 @@ Discovers and runs conformance tests, outputs results as JSON.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -662,6 +691,8 @@ from pathlib import Path
 RESULTS_FILE = "/logs/verifier/conformance_results.json"
 CONFORMANCE_BIN = "/workspace/bin/conformance"
 MOCK_SERVER_URL = "http://localhost:9999"
+RUN_CMD_CACHE = {}
+CONFORMANCE_DEADLINE_TS = None
 
 
 def get_mock_requests(path_filter=None):
@@ -695,7 +726,26 @@ def assert_mock_called(path, method="POST", min_count=1):
 
 
 def run_cmd(args, stdin_data=None, timeout=30, env=None):
-    """Run a command and return (exit_code, stdout, stderr)."""
+    """Run a command and return (exit_code, stdout, stderr), with cache and global deadline."""
+    global CONFORMANCE_DEADLINE_TS
+
+    stdin_text = stdin_data if isinstance(stdin_data, str) else ""
+    stdin_hash = hashlib.sha1(stdin_text.encode("utf-8")).hexdigest()
+    env_pairs = tuple(sorted((env or {}).items()))
+    env_hash = hashlib.sha1(repr(env_pairs).encode("utf-8")).hexdigest()
+    cache_key = (tuple(args), stdin_hash, env_hash, int(timeout))
+    if cache_key in RUN_CMD_CACHE:
+        return RUN_CMD_CACHE[cache_key]
+
+    effective_timeout = timeout
+    if CONFORMANCE_DEADLINE_TS is not None:
+        remaining = CONFORMANCE_DEADLINE_TS - time.time()
+        if remaining <= 0:
+            result = (-3, "", "Global conformance runtime budget exceeded")
+            RUN_CMD_CACHE[cache_key] = result
+            return result
+        effective_timeout = min(timeout, max(1, int(remaining)))
+
     merged_env = {**os.environ, **(env or {})}
     try:
         result = subprocess.run(
@@ -703,15 +753,21 @@ def run_cmd(args, stdin_data=None, timeout=30, env=None):
             input=stdin_data,
             capture_output=True,
             text=True,
-            timeout=timeout,
+            timeout=effective_timeout,
             env=merged_env,
             cwd="/workspace",
         )
-        return result.returncode, result.stdout, result.stderr
+        output = (result.returncode, result.stdout, result.stderr)
+        RUN_CMD_CACHE[cache_key] = output
+        return output
     except subprocess.TimeoutExpired:
-        return -1, "", "Timeout"
+        output = (-1, "", "Timeout")
+        RUN_CMD_CACHE[cache_key] = output
+        return output
     except FileNotFoundError:
-        return -2, "", f"Command not found: {args[0]}"
+        output = (-2, "", f"Command not found: {args[0]}")
+        RUN_CMD_CACHE[cache_key] = output
+        return output
 
 
 class ConformanceTest:
@@ -762,7 +818,6 @@ def tier0_tests():
         t = ConformanceTest("binary_exists", "plumbing", "./bin/conformance exists and is executable")
         t.error = "Binary not found at ./bin/conformance"
         tests.append(t)
-        return tests
 
     # client-from-env
     t = ConformanceTest("client_from_env", "plumbing", "client-from-env reads OPENAI_API_KEY")
@@ -868,7 +923,6 @@ def tier1_tests():
         t = ConformanceTest("binary_exists", "core_infra", "./bin/conformance exists and is executable")
         t.error = "Binary not found at ./bin/conformance"
         tests.append(t)
-        return tests
 
     # Core Infrastructure
     t = ConformanceTest("client_from_env", "core_infra", "Client construction from env vars")
@@ -1126,6 +1180,124 @@ def tier1_tests():
     t.passed = code == 0
     if not t.passed:
         t.error = err[:500]
+    tests.append(t)
+
+    # Streaming atomic checks (reuse cached stream subprocess output)
+    t = ConformanceTest("stream_exit_zero", "generation", "stream exits with code 0")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500] if err else f"exit code={code}"
+    tests.append(t)
+
+    t = ConformanceTest("stream_outputs_lines", "generation", "stream emits at least one output line")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [l for l in out.strip().splitlines() if l.strip()]
+    t.passed = code == 0 and len(lines) > 0
+    if not t.passed:
+        t.error = err[:500] if err else "No stream lines emitted"
+    tests.append(t)
+
+    t = ConformanceTest("stream_lines_are_json", "generation", "stream lines are valid JSON objects")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [l for l in out.strip().splitlines() if l.strip()]
+    if code == 0 and lines:
+        try:
+            for line in lines:
+                json.loads(line)
+            t.passed = True
+        except (json.JSONDecodeError, ValueError):
+            t.passed = False
+            t.error = "At least one stream line is not valid JSON"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else "No stream output"
+    tests.append(t)
+
+    t = ConformanceTest("stream_has_delta_event", "generation", "stream includes at least one delta event")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [l for l in out.strip().splitlines() if l.strip()]
+    if code == 0 and lines:
+        try:
+            events = [json.loads(l) for l in lines]
+            has_delta = any(
+                ("delta" in e and e.get("delta") not in ("", None))
+                or "delta" in str(e.get("type", "")).lower()
+                for e in events if isinstance(e, dict)
+            )
+            t.passed = has_delta
+            if not t.passed:
+                t.error = "No delta event found in stream output"
+        except (json.JSONDecodeError, ValueError):
+            t.passed = False
+            t.error = "Stream events are not valid JSON"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else "No stream output"
+    tests.append(t)
+
+    t = ConformanceTest("stream_has_terminal_event", "generation", "stream includes a terminal event")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [l for l in out.strip().splitlines() if l.strip()]
+    if code == 0 and lines:
+        try:
+            events = [json.loads(l) for l in lines]
+            has_terminal = any(
+                e.get("type", "") in ("response.completed", "response.done", "message_stop", "done")
+                or e.get("done", False) is True
+                or "stop" in str(e.get("type", "")).lower()
+                or "completed" in str(e.get("type", "")).lower()
+                for e in events if isinstance(e, dict)
+            )
+            t.passed = has_terminal
+            if not t.passed:
+                t.error = "No terminal event found in stream output"
+        except (json.JSONDecodeError, ValueError):
+            t.passed = False
+            t.error = "Stream events are not valid JSON"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else "No stream output"
+    tests.append(t)
+
+    t = ConformanceTest("stream_delta_text_non_empty", "generation", "stream delta text accumulates to non-empty string")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [l for l in out.strip().splitlines() if l.strip()]
+    if code == 0 and lines:
+        try:
+            events = [json.loads(l) for l in lines]
+            text_parts = []
+            for e in events:
+                if not isinstance(e, dict):
+                    continue
+                d = e.get("delta", "")
+                if isinstance(d, str) and d:
+                    text_parts.append(d)
+                elif isinstance(d, dict):
+                    dtext = d.get("text", "")
+                    if isinstance(dtext, str) and dtext:
+                        text_parts.append(dtext)
+            t.passed = len("".join(text_parts)) > 0
+            if not t.passed:
+                t.error = "No non-empty delta text found"
+        except (json.JSONDecodeError, ValueError):
+            t.passed = False
+            t.error = "Stream events are not valid JSON"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else "No stream output"
     tests.append(t)
 
     # Stream event types
@@ -1467,7 +1639,6 @@ def tier2_tests():
         t = ConformanceTest("binary_exists", "core_loop", "./bin/conformance exists and is executable")
         t.error = "Binary not found at ./bin/conformance"
         tests.append(t)
-        return tests
 
     # Session creation
     t = ConformanceTest("session_create", "core_loop", "Session can be created with id/session_id/status")
@@ -2007,7 +2178,6 @@ def tier3_tests():
         t = ConformanceTest("binary_exists", "dot_parsing", "./bin/conformance exists and is executable")
         t.error = "Binary not found at ./bin/conformance"
         tests.append(t)
-        return tests
 
     # Write test DOT files
     dot_dir = Path("/tmp/attractorbench_dots")
@@ -2593,20 +2763,351 @@ def tier3_tests():
     return tests
 
 
+def tier0_quick_tests():
+    tests = []
+
+    t = ConformanceTest("build_check", "plumbing", "make build succeeds")
+    start = time.time()
+    code, out, err = run_cmd(["make", "build"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500]
+    tests.append(t)
+
+    t = ConformanceTest("binary_exists", "plumbing", "./bin/conformance exists and is executable")
+    t.passed = check_binary_exists()
+    if not t.passed:
+        t.error = "Binary not found at ./bin/conformance"
+    tests.append(t)
+
+    t = ConformanceTest("client_from_env", "plumbing", "client-from-env reads OPENAI_API_KEY")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "client-from-env"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500] or out[:500]
+    tests.append(t)
+
+    t = ConformanceTest("list_models", "plumbing", "list-models returns valid JSON")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "list-models"])
+    t.duration = time.time() - start
+    try:
+        parsed = json.loads(out)
+        t.passed = code == 0 and isinstance(parsed, (dict, list))
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "Invalid JSON from list-models"
+    if not t.passed and not t.error:
+        t.error = err[:500]
+    tests.append(t)
+
+    req = json.dumps({"model": "gpt-4o", "messages": [{"role": "user", "content": "Say hello"}]})
+    t = ConformanceTest("complete_json", "plumbing", "complete returns valid JSON")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "complete"], stdin_data=req)
+    t.duration = time.time() - start
+    try:
+        parsed = json.loads(out)
+        t.passed = code == 0 and isinstance(parsed, dict)
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "Invalid JSON from complete"
+    if not t.passed and not t.error:
+        t.error = err[:500]
+    tests.append(t)
+
+    return tests
+
+
+def tier1_quick_tests():
+    tests = []
+
+    t = ConformanceTest("build_check", "core_infra", "make build succeeds")
+    start = time.time()
+    code, out, err = run_cmd(["make", "build"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500]
+    tests.append(t)
+
+    t = ConformanceTest("client_from_env", "core_infra", "Client construction from env vars")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "client-from-env"])
+    t.duration = time.time() - start
+    t.passed = code == 0
+    if not t.passed:
+        t.error = err[:500]
+    tests.append(t)
+
+    t = ConformanceTest("list_models", "core_infra", "list-models returns a JSON array")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "list-models"])
+    t.duration = time.time() - start
+    try:
+        parsed = json.loads(out)
+        t.passed = code == 0 and isinstance(parsed, list)
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "Invalid JSON list from list-models"
+    if not t.passed and not t.error:
+        t.error = err[:500]
+    tests.append(t)
+
+    simple_request = json.dumps({
+        "model": "gpt-4o",
+        "provider": "openai",
+        "messages": [{"role": "user", "content": "Say hello"}],
+        "max_tokens": 100,
+    })
+    t = ConformanceTest("complete_schema_min", "generation", "complete returns JSON with id + content/output")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "complete"], stdin_data=simple_request)
+    t.duration = time.time() - start
+    try:
+        resp = json.loads(out)
+        has_id = isinstance(resp, dict) and isinstance(resp.get("id"), str) and len(resp.get("id")) > 0
+        has_payload = isinstance(resp.get("output"), list) or isinstance(resp.get("content"), list) or isinstance(resp.get("choices"), list)
+        t.passed = code == 0 and has_id and has_payload
+        if not t.passed:
+            t.error = f"id={has_id} payload={has_payload}"
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "Invalid JSON response from complete"
+    tests.append(t)
+
+    reset_mock_requests()
+    t = ConformanceTest("provider_routing_openai", "core_infra", "provider=openai hits OpenAI mock endpoint")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "complete"], stdin_data=simple_request)
+    t.duration = time.time() - start
+    t.passed = code == 0 and (assert_mock_called("/v1/responses") or assert_mock_called("/v1/chat/completions"))
+    if not t.passed:
+        t.error = "OpenAI provider did not hit /v1/responses or /v1/chat/completions"
+    tests.append(t)
+
+    stream_request = json.dumps({
+        "model": "gpt-4o",
+        "provider": "openai",
+        "messages": [{"role": "user", "content": "Say hello"}],
+        "max_tokens": 100,
+        "stream": True,
+    })
+    t = ConformanceTest("stream_json_lines_parse", "generation", "stream emits JSON lines")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "stream"], stdin_data=stream_request)
+    t.duration = time.time() - start
+    lines = [line for line in out.splitlines() if line.strip()]
+    if code == 0 and lines:
+        try:
+            for line in lines:
+                json.loads(line)
+            t.passed = True
+        except (json.JSONDecodeError, ValueError):
+            t.passed = False
+            t.error = "stream emitted non-JSON line"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else "No stream output"
+    tests.append(t)
+
+    return tests
+
+
+def tier2_quick_tests():
+    tests = []
+
+    t = ConformanceTest("binary_exists", "core_loop", "./bin/conformance exists and is executable")
+    t.passed = check_binary_exists()
+    if not t.passed:
+        t.error = "Binary not found at ./bin/conformance"
+    tests.append(t)
+
+    t = ConformanceTest("session_create", "core_loop", "session-create exits successfully")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "session-create"])
+    t.duration = time.time() - start
+    if code == 0:
+        t.passed = True
+        if out.strip():
+            try:
+                parsed = json.loads(out)
+                t.passed = isinstance(parsed, dict)
+            except (json.JSONDecodeError, ValueError):
+                t.passed = False
+                t.error = "session-create output is not JSON"
+    else:
+        t.passed = False
+        t.error = err[:500]
+    tests.append(t)
+
+    reset_mock_requests()
+    prompt = json.dumps({"prompt": "Create hello.py"})
+    t = ConformanceTest("process_input", "core_loop", "process-input returns JSON and calls mock")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "process-input"], stdin_data=prompt, timeout=60)
+    t.duration = time.time() - start
+    try:
+        parsed = json.loads(out)
+        has_shape = isinstance(parsed, dict) and any(k in parsed for k in ("status", "result", "output", "turns"))
+        mock_called = assert_mock_called("/v1/responses") or assert_mock_called("/v1/chat/completions") or assert_mock_called("/messages")
+        t.passed = code == 0 and has_shape and mock_called
+        if not t.passed:
+            t.error = f"shape={has_shape} mock_called={mock_called}"
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "process-input must return JSON"
+    tests.append(t)
+
+    call = json.dumps({"tool_name": "read_file", "arguments": {"path": "/workspace/hello.py"}})
+    t = ConformanceTest("tool_dispatch", "tool_execution", "tool-dispatch returns JSON")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "tool-dispatch"], stdin_data=call)
+    t.duration = time.time() - start
+    try:
+        parsed = json.loads(out)
+        t.passed = code == 0 and isinstance(parsed, dict)
+        if not t.passed:
+            t.error = "tool-dispatch returned non-object JSON"
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "tool-dispatch must return JSON"
+    tests.append(t)
+
+    return tests
+
+
+def tier3_quick_tests():
+    tests = []
+
+    t = ConformanceTest("binary_exists", "dot_parsing", "./bin/conformance exists and is executable")
+    t.passed = check_binary_exists()
+    if not t.passed:
+        t.error = "Binary not found at ./bin/conformance"
+    tests.append(t)
+
+    dot_dir = Path("/tmp/attractorbench_quick")
+    dot_dir.mkdir(parents=True, exist_ok=True)
+    tiny = dot_dir / "tiny.dot"
+    tiny.write_text("digraph tiny { start [shape=Mdiamond]; done [shape=Msquare]; start -> done; }")
+
+    t = ConformanceTest("parse_tiny", "dot_parsing", "parse tiny DOT into JSON")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "parse", str(tiny)])
+    t.duration = time.time() - start
+    try:
+        ast = json.loads(out)
+        t.passed = code == 0 and isinstance(ast, dict)
+    except (json.JSONDecodeError, ValueError):
+        t.passed = False
+        t.error = "parse must return JSON AST"
+    if not t.passed and not t.error:
+        t.error = err[:500]
+    tests.append(t)
+
+    t = ConformanceTest("validate_tiny", "validation", "validate tiny DOT")
+    start = time.time()
+    code, out, err = run_cmd([CONFORMANCE_BIN, "validate", str(tiny)])
+    t.duration = time.time() - start
+    if code == 0:
+        t.passed = True
+        if out.strip():
+            try:
+                json.loads(out)
+            except (json.JSONDecodeError, ValueError):
+                t.passed = False
+                t.error = "validate output must be JSON when present"
+    else:
+        t.passed = False
+        t.error = err[:500] if err else out[:200]
+    tests.append(t)
+
+    return tests
+
+
+SUITES_BY_TIER = {
+    0: {"full", "quick"},
+    1: {"full", "quick", "core_infra", "generation", "streaming", "tool_calling", "structured_output", "error_handling"},
+    2: {"full", "quick", "core_loop", "tool_execution", "events", "steering"},
+    3: {"full", "quick", "parse_validate", "run", "handlers"},
+}
+
+
+def _suite_filter(tier, suite):
+    if tier == 1:
+        return {
+            "core_infra": lambda t: t.section == "core_infra",
+            "generation": lambda t: t.section == "generation",
+            "streaming": lambda t: t.name.startswith("stream_") or t.name == "anthropic_stream",
+            "tool_calling": lambda t: t.section == "tool_calling",
+            "structured_output": lambda t: t.name in {"generate_object", "generate_object_schema"},
+            "error_handling": lambda t: t.section == "error_handling",
+        }.get(suite)
+    if tier == 2:
+        return {
+            "core_loop": lambda t: t.section == "core_loop",
+            "tool_execution": lambda t: t.section in {"tool_execution", "execution_environment"},
+            "events": lambda t: t.section == "event_system",
+            "steering": lambda t: t.section in {"steering", "system_prompts"},
+        }.get(suite)
+    if tier == 3:
+        return {
+            "parse_validate": lambda t: t.section in {"dot_parsing", "validation", "condition_expressions"},
+            "run": lambda t: t.section in {"execution_engine", "goal_gate", "retry_logic", "state_context"},
+            "handlers": lambda t: t.section == "node_handlers",
+        }.get(suite)
+    return None
+
+
+def _select_tests_for_suite(tests, tier, suite):
+    if suite in ("full", "quick"):
+        return tests
+    filt = _suite_filter(tier, suite)
+    if filt is None:
+        return tests
+    return [t for t in tests if filt(t)]
+
+
 def main():
+    global CONFORMANCE_DEADLINE_TS
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--tier", type=int, required=True)
+    parser.add_argument("--suite", type=str, default="full")
+    parser.add_argument("--max-seconds", type=int, default=0)
     parser.add_argument("--output", type=str, default=RESULTS_FILE,
                         help="Path to write conformance results JSON")
     args = parser.parse_args()
 
-    tier_runners = {0: tier0_tests, 1: tier1_tests, 2: tier2_tests, 3: tier3_tests}
-    runner = tier_runners.get(args.tier)
+    suite = args.suite.strip().lower()
+    if args.tier not in SUITES_BY_TIER or suite not in SUITES_BY_TIER[args.tier]:
+        allowed = ", ".join(sorted(SUITES_BY_TIER.get(args.tier, [])))
+        print(f"Unknown suite '{args.suite}' for tier {args.tier}. Allowed: {allowed}", file=sys.stderr)
+        sys.exit(2)
+
+    full_runners = {0: tier0_tests, 1: tier1_tests, 2: tier2_tests, 3: tier3_tests}
+    quick_runners = {0: tier0_quick_tests, 1: tier1_quick_tests, 2: tier2_quick_tests, 3: tier3_quick_tests}
+    runner = full_runners.get(args.tier)
     if not runner:
         print(f"Unknown tier: {args.tier}", file=sys.stderr)
         sys.exit(1)
 
-    tests = runner()
+    RUN_CMD_CACHE.clear()
+    if args.max_seconds > 0:
+        cap = args.max_seconds
+    else:
+        cap = 20 if suite == "quick" else 120
+    CONFORMANCE_DEADLINE_TS = time.time() + cap
+
+    if suite == "quick":
+        tests = quick_runners[args.tier]()
+    elif suite == "full":
+        tests = runner()
+    else:
+        tests = _select_tests_for_suite(runner(), args.tier, suite)
 
     # Group by section
     sections = {}
@@ -2620,6 +3121,7 @@ def main():
 
     results = {
         "tier": args.tier,
+        "suite": suite,
         "tests": [t.to_dict() for t in tests],
         "sections": sections,
         "total": len(tests),
@@ -2672,6 +3174,7 @@ services:
     environment:
       - OPENAI_BASE_URL=http://litellm:4000/v1
       - ANTHROPIC_BASE_URL=http://litellm:4000/anthropic
+      - GOOGLE_GEMINI_BASE_URL=http://litellm:4000/gemini
     volumes:
       - litellm-logs:/logs/litellm
 
@@ -2797,6 +3300,53 @@ def parse_proxy_log(log_path: Path) -> dict:
     }
 
 
+GEMINI_TRAJECTORY = Path("/logs/agent/gemini-cli.trajectory.json")
+
+
+def parse_gemini_trajectory(traj_path: Path) -> dict:
+    """Parse Gemini CLI trajectory file for token usage as a fallback."""
+    if not traj_path.exists():
+        return {}
+
+    try:
+        with open(traj_path) as f:
+            trajectory = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    prompt_tokens = 0
+    completion_tokens = 0
+    request_count = 0
+
+    for message in trajectory.get("messages", []):
+        if message.get("type") != "gemini":
+            continue
+        tokens = message.get("tokens", {})
+        if not tokens:
+            continue
+        request_count += 1
+        prompt_tokens += tokens.get("input", 0)
+        completion_tokens += (
+            tokens.get("output", 0)
+            + tokens.get("thoughts", 0)
+            + tokens.get("tool", 0)
+        )
+
+    if request_count == 0:
+        return {}
+
+    total_tokens = prompt_tokens + completion_tokens
+    return {
+        "total_tokens": total_tokens,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": None,
+        "request_count": request_count,
+        "models_seen": [],
+        "source": "gemini-trajectory",
+    }
+
+
 def main():
     print(f"Harvesting LiteLLM metrics from {PROXY_LOG}")
 
@@ -2805,6 +3355,11 @@ def main():
     model = os.environ.get("HARBOR_MODEL", "unknown")
 
     usage = parse_proxy_log(PROXY_LOG)
+
+    # Fallback: if LiteLLM had no token data, try the Gemini trajectory
+    if not usage and GEMINI_TRAJECTORY.exists():
+        print("  No LiteLLM usage data; falling back to Gemini trajectory")
+        usage = parse_gemini_trajectory(GEMINI_TRAJECTORY)
 
     metadata = {
         "agent": agent,
@@ -2817,6 +3372,8 @@ def main():
         metadata["completion_tokens"] = usage["completion_tokens"]
         if usage.get("cost_usd") is not None:
             metadata["cost_usd"] = usage["cost_usd"]
+        source = usage.get("source", "litellm-proxy")
+        print(f"  Source: {source}")
         print(f"  Requests: {usage['request_count']}")
         print(f"  Total tokens: {usage['total_tokens']}")
         print(f"  Prompt tokens: {usage['prompt_tokens']}")
@@ -2826,7 +3383,7 @@ def main():
         if usage.get("models_seen"):
             print(f"  Models: {', '.join(usage['models_seen'])}")
     else:
-        print("  No usage data found in proxy log (metrics will be null)")
+        print("  No usage data found (metrics will be null)")
 
     METADATA_OUT.parent.mkdir(parents=True, exist_ok=True)
     METADATA_OUT.write_text(json.dumps(metadata, indent=2))
@@ -2903,6 +3460,7 @@ def generate_stacked_instruction(stacked: StackedTierDef) -> str:
 """)
 
     layers_text = "\n---\n\n".join(layer_summaries)
+    recommended_loop = _recommended_loop_for_stacked()
 
     return f"""# Full Stack — attractorbench Tiers 1-3
 
@@ -2931,7 +3489,34 @@ Read each spec file before implementing its layer.
 
 ---
 
+{recommended_loop}
+
+---
+
 {layers_text}
+"""
+
+
+def _recommended_loop_for_stacked() -> str:
+    return """## Recommended Loop (Layered Iteration)
+
+Run this loop repeatedly and advance layer-by-layer:
+
+1. Implement Layer 1 minimal path, then run:
+   - `python3 /tests/conformance/run_conformance.py --tier 1 --suite quick`
+2. Fix Layer 1 failures until quick is mostly green, then run:
+   - `python3 /tests/conformance/run_conformance.py --tier 1 --suite full`
+3. Implement Layer 2 using Layer 1 imports, then iterate with:
+   - `python3 /tests/conformance/run_conformance.py --tier 2 --suite quick`
+4. Implement Layer 3 using Layer 2 as backend, then iterate with:
+   - `python3 /tests/conformance/run_conformance.py --tier 3 --suite quick`
+5. Before finalizing, run all full suites for tiers 1-3.
+6. Inspect:
+   - `/logs/verifier/conformance_results.json` (or per-tier files)
+   - `/logs/verifier/conformance.log` (or per-tier logs)
+7. Keep iterating until timeout or all tests pass.
+
+Do not stop at first failure; conformance output is the primary repair signal.
 """
 
 
@@ -2978,6 +3563,7 @@ RUN chmod -R 777 /workspace /logs /tests
 
 # Copy tier specification files so the agent can read them at build time
 COPY specs/ /workspace/specs/
+COPY starter/ /workspace/
 
 WORKDIR /workspace
 """
@@ -3045,6 +3631,7 @@ export GEMINI_BASE_URL=http://localhost:9999
 echo "=== Phase 3a: Tier 1 Conformance ===" | tee /logs/verifier/conformance_tier1.log
 curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
 python3 /tests/conformance/run_conformance.py --tier 1 \
+  --suite full \
   --output /logs/verifier/conformance_results_tier1.json >> /logs/verifier/conformance_tier1.log 2>&1
 CONF1_EXIT=$?
 echo "Tier 1 conformance exit code: $CONF1_EXIT" | tee -a /logs/verifier/conformance_tier1.log
@@ -3053,6 +3640,7 @@ echo "Tier 1 conformance exit code: $CONF1_EXIT" | tee -a /logs/verifier/conform
 echo "=== Phase 3b: Tier 2 Conformance ===" | tee /logs/verifier/conformance_tier2.log
 curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
 python3 /tests/conformance/run_conformance.py --tier 2 \
+  --suite full \
   --output /logs/verifier/conformance_results_tier2.json >> /logs/verifier/conformance_tier2.log 2>&1
 CONF2_EXIT=$?
 echo "Tier 2 conformance exit code: $CONF2_EXIT" | tee -a /logs/verifier/conformance_tier2.log
@@ -3094,6 +3682,7 @@ else
   echo "=== Phase 3c: Tier 3 Conformance ===" | tee /logs/verifier/conformance_tier3.log
   curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
   python3 /tests/conformance/run_conformance.py --tier 3 \
+    --suite full \
     --output /logs/verifier/conformance_results_tier3.json >> /logs/verifier/conformance_tier3.log 2>&1
   CONF3_EXIT=$?
   echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conformance_tier3.log
@@ -3290,7 +3879,115 @@ if __name__ == "__main__":
 '''
 
 
-def generate_tasks(tiers: list[TierDef], output_dir: Path, *, stacked: bool = True) -> list[str]:
+@dataclass(frozen=True)
+class TaskVariantDef:
+    """Optional curriculum task variant for a tier."""
+
+    tier: int
+    slug: str
+    name: str
+    suite: str
+    section_keys: tuple[str, ...]
+    agent_timeout: int
+    verifier_timeout: int
+
+
+def _curriculum_variants_for_tier(tier: TierDef) -> list[TaskVariantDef]:
+    if tier.tier == 1:
+        return [
+            TaskVariantDef(1, "tier1-core-infra", "Tier 1 Core Infra", "core_infra", ("core_infra",), 1800, 300),
+            TaskVariantDef(1, "tier1-generation", "Tier 1 Generation", "generation", ("generation",), 1800, 300),
+            TaskVariantDef(1, "tier1-streaming", "Tier 1 Streaming", "streaming", ("generation",), 1200, 240),
+            TaskVariantDef(1, "tier1-tool-calling", "Tier 1 Tool Calling", "tool_calling", ("tool_calling",), 1800, 300),
+            TaskVariantDef(1, "tier1-structured-output", "Tier 1 Structured Output", "structured_output", ("generation",), 1200, 240),
+            TaskVariantDef(1, "tier1-error-handling", "Tier 1 Error Handling", "error_handling", ("error_handling",), 1200, 240),
+        ]
+    if tier.tier == 2:
+        return [
+            TaskVariantDef(2, "tier2-core-loop", "Tier 2 Core Loop", "core_loop", ("core_loop",), 1800, 300),
+            TaskVariantDef(2, "tier2-tool-execution", "Tier 2 Tool Execution", "tool_execution", ("tool_execution", "execution_environment"), 1800, 300),
+            TaskVariantDef(2, "tier2-events", "Tier 2 Events", "events", ("event_system",), 1200, 240),
+            TaskVariantDef(2, "tier2-steering", "Tier 2 Steering", "steering", ("steering", "system_prompts"), 1200, 240),
+        ]
+    if tier.tier == 3:
+        return [
+            TaskVariantDef(3, "tier3-parse-validate", "Tier 3 Parse Validate", "parse_validate", ("dot_parsing", "validation"), 1800, 300),
+            TaskVariantDef(3, "tier3-run", "Tier 3 Run", "run", ("execution_engine", "goal_gate", "retry_logic", "state_context", "condition_expressions"), 1800, 300),
+            TaskVariantDef(3, "tier3-handlers", "Tier 3 Handlers", "handlers", ("node_handlers",), 1200, 240),
+        ]
+    return []
+
+
+def _tier_with_variant(tier: TierDef, variant: TaskVariantDef) -> TierDef:
+    filtered_sections = [s for s in tier.sections if s.key in set(variant.section_keys)]
+    return TierDef(
+        tier=tier.tier,
+        name=variant.name,
+        slug=variant.slug,
+        spec_file=tier.spec_file,
+        dod_section_number=tier.dod_section_number,
+        agent_timeout=variant.agent_timeout,
+        verifier_timeout=variant.verifier_timeout,
+        sections=filtered_sections,
+    )
+
+
+def _starter_makefile() -> str:
+    return """# Starter scaffold. Replace these targets with real build/test commands.
+.PHONY: build test
+
+build:
+\t@echo "starter scaffold: replace 'make build' with your real build steps"
+
+test:
+\t@echo "starter scaffold: add a real test suite behind 'make test'"
+"""
+
+
+def _starter_conformance_stub() -> str:
+    return """#!/usr/bin/env bash
+set -euo pipefail
+echo "starter scaffold: ./bin/conformance is a stub. Implement required subcommands." >&2
+exit 2
+"""
+
+
+def _starter_quick_runner(default_tier: int) -> str:
+    return f"""#!/usr/bin/env bash
+set -euo pipefail
+
+tier="${{ATTRACTORBENCH_TIER:-{default_tier}}}"
+if [ "${{1:-}}" != "" ] && [[ "${{1}}" =~ ^[0-9]+$ ]]; then
+  tier="${{1}}"
+  shift
+fi
+
+python3 /tests/conformance/run_conformance.py --tier "${{tier}}" --suite quick "$@"
+"""
+
+
+def _write_starter_files(task_dir: Path, default_tier: int) -> None:
+    import stat
+
+    # Write into environment/ so they're inside the Docker build context
+    starter_dir = task_dir / "environment" / "starter"
+    starter_bin = starter_dir / "bin"
+    starter_bin.mkdir(parents=True, exist_ok=True)
+    (starter_dir / "Makefile").write_text(_starter_makefile())
+    (starter_bin / "conformance").write_text(_starter_conformance_stub())
+    (starter_bin / "run-conformance-quick").write_text(_starter_quick_runner(default_tier))
+
+    for script in [starter_bin / "conformance", starter_bin / "run-conformance-quick"]:
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+
+
+def generate_tasks(
+    tiers: list[TierDef],
+    output_dir: Path,
+    *,
+    stacked: bool = True,
+    curriculum: bool = False,
+) -> list[str]:
     """Generate Harbor-compatible task directories for all tiers.
 
     Returns a list of generated task directory names (slugs).
@@ -3298,8 +3995,8 @@ def generate_tasks(tiers: list[TierDef], output_dir: Path, *, stacked: bool = Tr
     When stacked=True (default) and tiers 1, 2, 3 are all present,
     they are merged into a single 'full-stack' task directory.
     Tier 0 is always generated individually.
+    When curriculum=True, additional subtier tasks are generated.
     """
-    import stat
 
     output_dir.mkdir(parents=True, exist_ok=True)
     generated: list[str] = []
@@ -3325,10 +4022,17 @@ def generate_tasks(tiers: list[TierDef], output_dir: Path, *, stacked: bool = Tr
         _generate_stacked_task(stacked_def, output_dir)
         generated.append(stacked_def.slug)
 
+    if curriculum:
+        for tier in tiers:
+            for variant in _curriculum_variants_for_tier(tier):
+                variant_tier = _tier_with_variant(tier, variant)
+                _generate_individual_task(variant_tier, output_dir, suite=variant.suite)
+                generated.append(variant.slug)
+
     return generated
 
 
-def _generate_individual_task(tier: TierDef, output_dir: Path) -> None:
+def _generate_individual_task(tier: TierDef, output_dir: Path, *, suite: str = "full") -> None:
     """Generate a single Harbor task directory for one tier."""
     import stat
 
@@ -3349,11 +4053,12 @@ def _generate_individual_task(tier: TierDef, output_dir: Path) -> None:
     (env_dir / "Dockerfile").write_text(generate_dockerfile(tier))
     (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
     (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
+    _write_starter_files(task_dir, default_tier=tier.tier)
 
     # tests/
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
-    (tests_dir / "test.sh").write_text(generate_test_sh(tier))
+    (tests_dir / "test.sh").write_text(generate_test_sh(tier, suite=suite))
     (tests_dir / "mock_server.py").write_text(generate_mock_server())
     (tests_dir / "score.py").write_text(generate_score_py())
     (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
@@ -3394,6 +4099,7 @@ def _generate_stacked_task(stacked: StackedTierDef, output_dir: Path) -> None:
     (env_dir / "Dockerfile").write_text(generate_stacked_dockerfile(stacked))
     (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
     (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
+    _write_starter_files(task_dir, default_tier=1)
 
     # environment/specs/ — per-tier specification files (COPYd into container)
     specs_dir = env_dir / "specs"

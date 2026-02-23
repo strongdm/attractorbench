@@ -25,6 +25,29 @@ Read each spec file before implementing its layer.
 
 ---
 
+## Recommended Loop (Layered Iteration)
+
+Run this loop repeatedly and advance layer-by-layer:
+
+1. Implement Layer 1 minimal path, then run:
+   - `python3 /tests/conformance/run_conformance.py --tier 1 --suite quick`
+2. Fix Layer 1 failures until quick is mostly green, then run:
+   - `python3 /tests/conformance/run_conformance.py --tier 1 --suite full`
+3. Implement Layer 2 using Layer 1 imports, then iterate with:
+   - `python3 /tests/conformance/run_conformance.py --tier 2 --suite quick`
+4. Implement Layer 3 using Layer 2 as backend, then iterate with:
+   - `python3 /tests/conformance/run_conformance.py --tier 3 --suite quick`
+5. Before finalizing, run all full suites for tiers 1-3.
+6. Inspect:
+   - `/logs/verifier/conformance_results.json` (or per-tier files)
+   - `/logs/verifier/conformance.log` (or per-tier logs)
+7. Keep iterating until timeout or all tests pass.
+
+Do not stop at first failure; conformance output is the primary repair signal.
+
+
+---
+
 ## Layer 1: Unified LLM SDK
 
 **Full specification**: `/workspace/specs/tier1_spec.md` — read this file before implementing this layer.

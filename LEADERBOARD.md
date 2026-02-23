@@ -1,23 +1,45 @@
-# AttractorBench Leaderboard
+# AttractorBench Leaderboard Snapshot
 
-Agent+model rankings across benchmark runs. Score is the composite (5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3).
+**As of date:** 2026-02-23
 
-| Agent | Model | Label | Tasks | Score | T1 | T2 | T3 | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |
-|-------|-------|-------|------:|------:|---:|---:|---:|-------:|-----:|-----------:|-----:|-------:|-----:|
-| claude-code | claude-sonnet-4-6 |  | 2 | 0.746 | 78.6% | 63.2% | 0.0% | 4.8M | 27m35s | 34 | $6.79 | 6.4M | $9.10 |
-| claude-code | claude-sonnet-4-6 |  | 2 | 0.729 | 67.9% | 68.4% | 0.0% | 26.3M | 39m34s | 172 | $11.14 | 36.0M | $15.28 |
-| codex | gpt-5.2 |  | 2 | 0.701 | 82.1% | 68.4% | 0.0% | 5.1M | 18m21s | 83 | $9.77 | 7.2M | $13.94 |
-| claude-code | claude-opus-4-6 |  | 2 | 0.680 | 25.0% | 68.4% | 0.0% | 16.6M | 33m05s | 93 | $15.05 | 24.4M | $22.13 |
-| opencode | gemini-3.1-pro-preview-customtools |  | 2 | 0.640 | 25.0% | 68.4% | 0.0% | 6.9M | 20m15s | 95 | $14.34 | 10.8M | $22.40 |
-| gemini-cli | gemini-3.1-pro-preview-customtools |  | 2 | 0.624 | 25.0% | 57.9% | 0.0% | 191K | 15m59s | 80 | $0.41 | 307K | $0.66 |
-| codex | gpt-5.2 |  | 2 | 0.596 | 28.6% | 42.1% | 0.0% | 12.1M | 31m28s | 147 | $22.53 | 20.3M | $37.80 |
-| gemini-cli | gemini-3.1-pro-preview |  | 2 | 0.559 | 28.6% | 68.4% | 0.0% | 181K | 9m34s | 53 | $0.41 | 325K | $0.74 |
-| gemini-cli | gemini-2.5-pro |  | 2 | 0.550 | 17.9% | 15.8% | 0.0% | 22.5M | 35m12s | 168 | $29.74 | 40.9M | $54.03 |
-| codex | gpt-5.2-codex |  | 2 | 0.525 | 17.9% | 15.8% | 0.0% | 6.7M | 18m38s | 96 | $12.67 | 12.8M | $24.12 |
-| gemini-cli | gemini-2.5-pro |  | 2 | 0.450 | 0.0% | 0.0% | 0.0% | 448K | 2m09s | 19 | $0.65 | 996K | $1.45 |
-| gemini-cli | gemini-3.1-pro-preview |  | 2 | 0.450 | 0.0% | 0.0% | 0.0% | 91K | 1m35s | 7 | $0.23 | 202K | $0.51 |
-| gemini-cli | gemini-3.1-pro-preview |  | 2 | 0.383 | 0.0% | 0.0% | 0.0% | 58K | 1m22s | 6 | $0.15 | 153K | $0.40 |
-| gemini-cli | gemini-2.5-pro |  | 2 | 0.275 | 0.0% | 0.0% | 0.0% | 7.5M | 13m24s | 155 | $9.96 | 27.1M | $36.22 |
-| gemini-cli | gemini-3.0-flash |  | 2 | 0.000 | 0.0% | 0.0% | 0.0% | 0 | 7s | — | — | — | — |
-| opencode | gemini-3.1-pro-preview |  | 2 | 0.000 | 0.0% | 0.0% | 0.0% | — | 7s | — | — | — | — |
-| opencode | claude-sonnet-4-6 |  | 2 | 0.000 | 0.0% | 0.0% | 0.0% | — | 7s | — | — | — | — |
+This file is now a **curated summary snapshot**, not an auto-generated full ranking dump.
+For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
+
+Comparability policy:
+- Breaking benchmark changes are versioned.
+- Only runs on the same benchmark version are directly comparable.
+- Historical logs are still retained for context and trend analysis.
+
+## Narrative
+
+Current results are from `bench_version=1.0.0` historical runs.
+The top composite score observed so far is from `sonnet46-stacked-v2` (0.746), while efficiency leaders are currently Gemini 3.1 preview runs on a lower-score regime.
+Treat this as a moving snapshot, not a stable scientific ranking.
+
+## Current Bests
+
+Criteria:
+- Best score: highest composite score.
+- Best speed: shortest wall time among runs with score > 0.
+- Best token efficiency: lowest tokens per score point among runs with score > 0.
+- Best dollar efficiency: lowest $ per score point among runs with score > 0.
+
+| Metric | Run | Agent | Model | Value |
+|--------|-----|-------|-------|-------|
+| Best score | sonnet46-stacked-v2 | claude-code | claude-sonnet-4-6 | 0.746 |
+| Best speed | gemini31-stacked-v2 | gemini-cli | gemini-3.1-pro-preview | 1m22s |
+| Best token efficiency | gemini31-stacked-v2 | gemini-cli | gemini-3.1-pro-preview | ~153K tokens/point |
+| Best dollar efficiency | gemini31-stacked-v2 | gemini-cli | gemini-3.1-pro-preview | ~$0.40/point |
+
+## Snapshot Table (By Score)
+
+| Run | Bench Version | Agent | Model | Effort | Score | Tokens | Time | Cost |
+|-----|---------------|-------|-------|--------|------:|-------:|-----:|-----:|
+| sonnet46-stacked-v2 | 1.0.0 | claude-code | claude-sonnet-4-6 | unknown | 0.746 | 4.8M | 27m35s | $6.79 |
+| sonnet46-stacked-v1 | 1.0.0 | claude-code | claude-sonnet-4-6 | unknown | 0.729 | 26.3M | 39m34s | $11.14 |
+| gpt52-codex-stacked-v1 | 1.0.0 | codex | gpt-5.2 | unknown | 0.701 | 5.1M | 18m21s | $9.77 |
+| opus46-stacked-v1 | 1.0.0 | claude-code | claude-opus-4-6 | unknown | 0.680 | 16.6M | 33m05s | $15.05 |
+| gemini31ct-opencode-v1 | 1.0.0 | opencode | gemini-3.1-pro-preview-customtools | unknown | 0.640 | 6.9M | 20m15s | $14.34 |
+| gemini31ct-stacked-v1 | 1.0.0 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 0.624 | 191K | 15m59s | $0.41 |
+| gpt52-codex-stacked-v2 | 1.0.0 | codex | gpt-5.2 | high | 0.596 | 12.1M | 31m28s | $22.53 |
+| gemini31-stacked-v3 | 1.0.0 | gemini-cli | gemini-3.1-pro-preview | unknown | 0.559 | 181K | 9m34s | $0.41 |

@@ -4,13 +4,16 @@ from attractorbench.adapter import (
     generate_docker_compose,
     generate_dockerfile,
     generate_harvest_litellm,
+    generate_instruction,
     generate_litellm_config,
     generate_mock_server,
     generate_run_conformance,
     generate_score_py,
+    generate_stacked_test_sh,
     generate_task_toml,
     generate_test_sh,
 )
+from attractorbench.tiers import load_stacked_tier
 from attractorbench.tiers import TierDef
 
 
@@ -32,6 +35,13 @@ class AdapterGenerationTests(unittest.TestCase):
         self.assertIn("trap cleanup EXIT", script)
         self.assertIn("CONFORMANCE_EXIT=$?", script)
         self.assertIn("--conformance-exit $CONFORMANCE_EXIT", script)
+        self.assertIn("--suite full", script)
+
+    def test_instruction_has_recommended_loop(self) -> None:
+        instruction = generate_instruction(self.tier)
+        self.assertIn("Recommended Loop", instruction)
+        self.assertIn("--suite quick", instruction)
+        self.assertIn("/logs/verifier/conformance_results.json", instruction)
 
     # --- Mock server tests ---
 
@@ -91,6 +101,22 @@ class AdapterGenerationTests(unittest.TestCase):
         runner = generate_run_conformance()
         self.assertIn("assert_mock_called(", runner)
         self.assertIn("reset_mock_requests()", runner)
+
+    def test_conformance_runner_has_suite_arg(self) -> None:
+        runner = generate_run_conformance()
+        self.assertIn('parser.add_argument("--suite"', runner)
+        self.assertIn("SUITES_BY_TIER", runner)
+        self.assertIn("tier1_quick_tests", runner)
+
+    def test_conformance_runner_has_runtime_cache(self) -> None:
+        runner = generate_run_conformance()
+        self.assertIn("RUN_CMD_CACHE", runner)
+        self.assertIn("hashlib.sha1", runner)
+
+    def test_conformance_runner_has_atomic_stream_checks(self) -> None:
+        runner = generate_run_conformance()
+        self.assertIn("stream_exit_zero", runner)
+        self.assertIn("stream_lines_are_json", runner)
 
     # --- Score.py tests ---
 
@@ -156,6 +182,7 @@ class AdapterGenerationTests(unittest.TestCase):
         compose = generate_docker_compose()
         self.assertIn("OPENAI_BASE_URL=http://litellm:4000/v1", compose)
         self.assertIn("ANTHROPIC_BASE_URL=http://litellm:4000/anthropic", compose)
+        self.assertIn("GOOGLE_GEMINI_BASE_URL=http://litellm:4000/gemini", compose)
 
     def test_litellm_config_has_wildcard_model(self) -> None:
         config = generate_litellm_config()
@@ -197,8 +224,15 @@ class AdapterGenerationTests(unittest.TestCase):
     def test_dockerfile_has_tests_dir(self) -> None:
         dockerfile = generate_dockerfile(self.tier)
         self.assertIn("/tests", dockerfile)
+        self.assertIn("COPY starter/ /workspace/", dockerfile)
         # Harbor uploads tests at verify time — no COPY needed
         self.assertNotIn("COPY tests/", dockerfile)
+
+    def test_stacked_test_sh_uses_full_suite(self) -> None:
+        stacked = load_stacked_tier()
+        script = generate_stacked_test_sh(stacked)
+        self.assertIn("--tier 1", script)
+        self.assertIn("--suite full", script)
 
 
 if __name__ == "__main__":

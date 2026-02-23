@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tier="${ATTRACTORBENCH_TIER:-1}"
+if [ "${1:-}" != "" ] && [[ "${1}" =~ ^[0-9]+$ ]]; then
+  tier="${1}"
+  shift
+fi
+
+python3 /tests/conformance/run_conformance.py --tier "${tier}" --suite quick "$@"

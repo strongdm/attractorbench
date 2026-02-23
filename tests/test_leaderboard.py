@@ -14,6 +14,7 @@ from attractorbench.leaderboard import (
     load_harbor_metrics,
     load_run_metadata,
     render_markdown,
+    render_run_log_markdown,
     sort_leaderboard,
 )
 from attractorbench.models import RunMetadata
@@ -199,6 +200,38 @@ class TestBuildLeaderboard(unittest.TestCase):
             lb = build_leaderboard([job_dir])
             self.assertEqual(0, len(lb.entries))
 
+    def test_curriculum_tasks_excluded_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            job_dir = Path(tmpdir) / "run-curriculum"
+            _write_reward(
+                job_dir / "tier1-core-infra" / "logs" / "verifier" / "reward.json",
+                composite=0.9,
+            )
+            _write_reward(
+                job_dir / "tier1-unified-llm" / "logs" / "verifier" / "reward.json",
+                composite=0.6,
+            )
+
+            lb = build_leaderboard([job_dir])
+            self.assertEqual(1, len(lb.entries))
+            self.assertEqual(1, lb.entries[0].tasks_attempted)
+
+    def test_curriculum_tasks_included_with_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            job_dir = Path(tmpdir) / "run-curriculum"
+            _write_reward(
+                job_dir / "tier1-core-infra" / "logs" / "verifier" / "reward.json",
+                composite=0.9,
+            )
+            _write_reward(
+                job_dir / "tier1-unified-llm" / "logs" / "verifier" / "reward.json",
+                composite=0.6,
+            )
+
+            lb = build_leaderboard([job_dir], include_curriculum=True)
+            self.assertEqual(1, len(lb.entries))
+            self.assertEqual(2, lb.entries[0].tasks_attempted)
+
 
 class TestSortLeaderboard(unittest.TestCase):
     def test_sort_composite_descending(self) -> None:
@@ -330,11 +363,15 @@ def _make_trial_result(
     n_output_tokens: int | None = 5_000,
     exec_start: str = "2026-02-22T08:00:00Z",
     exec_end: str = "2026-02-22T08:10:00Z",
+    reasoning_effort: str | None = None,
 ) -> dict:
+    agent_cfg = {"name": agent_name, "model_name": model_name}
+    if reasoning_effort is not None:
+        agent_cfg["kwargs"] = {"reasoning_effort": reasoning_effort}
     return {
         "trial_name": trial_name,
         "config": {
-            "agent": {"name": agent_name, "model_name": model_name},
+            "agent": agent_cfg,
         },
         "agent_info": {
             "name": agent_name,
@@ -458,10 +495,20 @@ class TestLoadHarborMetrics(unittest.TestCase):
             self.assertIsNotNone(meta)
             self.assertEqual("claude-code", meta.agent)
             self.assertEqual("claude-sonnet-4-6", meta.model)
+            self.assertEqual("", meta.effort)
             self.assertEqual(1_000_000 + 5_000, meta.total_tokens)
             self.assertEqual(10, meta.tool_calls)  # 3+2+5
             self.assertAlmostEqual(600.0, meta.wall_seconds)  # 10 minutes
             self.assertIsNotNone(meta.cost_usd)
+
+    def test_extracts_reasoning_effort_from_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            job_dir = Path(tmpdir)
+            result = _make_trial_result(reasoning_effort="high")
+            _write_trial(job_dir, result)
+            meta = load_harbor_metrics(job_dir)
+            self.assertIsNotNone(meta)
+            self.assertEqual("high", meta.effort)
 
     def test_single_trial_without_trajectory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -557,6 +604,23 @@ class TestLoadRunMetadataHarborPriority(unittest.TestCase):
             meta = load_run_metadata(job_dir)
             self.assertEqual("aider", meta.agent)
             self.assertEqual(50000, meta.total_tokens)
+
+
+class TestRunLogRendering(unittest.TestCase):
+    def test_run_log_markdown_has_effort_and_version_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            job_dir = Path(tmpdir) / "run-a"
+            _write_reward(job_dir / "tier1-unified-llm" / "logs" / "verifier" / "reward.json")
+            result = _make_trial_result(reasoning_effort="medium")
+            _write_trial(job_dir, result)
+
+            from attractorbench.leaderboard import build_run_log
+
+            entries = build_run_log([job_dir])
+            md = render_run_log_markdown(entries)
+            self.assertIn("Bench Version", md)
+            self.assertIn("Effort", md)
+            self.assertIn("medium", md)
 
 
 if __name__ == "__main__":

@@ -47,6 +47,29 @@ class CliTierValidationTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0)
             self.assertTrue((out_dir / "tier1-unified-llm" / "task.toml").exists())
 
+    def test_generate_curriculum_emits_subtier_tasks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "generated"
+            result = self.runner.invoke(
+                app,
+                ["generate", "--tiers", "1", "--curriculum", "--output-dir", str(out_dir)],
+            )
+
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue((out_dir / "tier1-unified-llm" / "task.toml").exists())
+            self.assertTrue((out_dir / "tier1-core-infra" / "task.toml").exists())
+            self.assertTrue((out_dir / "tier1-streaming" / "task.toml").exists())
+
+    def test_generate_writes_starter_scaffold(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir) / "generated"
+            result = self.runner.invoke(app, ["generate", "--tiers", "1", "--output-dir", str(out_dir)])
+
+            self.assertEqual(result.exit_code, 0)
+            self.assertTrue((out_dir / "tier1-unified-llm" / "environment" / "starter" / "Makefile").exists())
+            self.assertTrue((out_dir / "tier1-unified-llm" / "environment" / "starter" / "bin" / "conformance").exists())
+            self.assertTrue((out_dir / "tier1-unified-llm" / "environment" / "starter" / "bin" / "run-conformance-quick").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

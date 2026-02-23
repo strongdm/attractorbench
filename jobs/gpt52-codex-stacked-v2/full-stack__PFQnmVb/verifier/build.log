@@ -1,4 +1,0 @@
-=== Phase 1: Build ===
-mkdir -p bin
-CGO_ENABLED=0 go build -o bin/conformance ./cmd/conformance
-Build exit code: 0

@@ -4,24 +4,27 @@ Benchmark for measuring how well coding agents implement systems from natural la
 
 Most coding benchmarks test whether an agent can fix a bug or write a function. AttractorBench tests whether an agent can read a 2,000-line system specification and build a conformant implementation from scratch. The specs come from [strongdm/attractor](https://github.com/strongdm/attractor) — a real production project, not synthetic puzzles.
 
+> [!IMPORTANT]
+> **NOTE (02-23-2026):** We are still tuning AttractorBench and do not regard current scores/totals as **valid for ranking** until we complete additional burn-in runs to characterize run-to-run variability.
+
 ## What It Measures
 
-**Spec-following ability.** Given a detailed NLSpec (natural language specification), can the agent produce a working system that satisfies the Definition of Done checklist?
+**Spec-following ability.** Given a detailed NLSpec (natural language specification), can the agent produce a working system that satisfies the Definition of Done (DoD) checklist?
 
 Scoring is granular, not pass/fail. Each tier has multiple conformance tests grouped by DoD section, so you can see exactly where an agent excels or breaks down: "it nailed the provider adapters but botched streaming and completely missed structured output."
 
 Key properties:
 - **Language-agnostic.** Agents choose their own implementation language. The only contract is `make build`, `make test`, and `./bin/conformance <subcommand>`.
-- **Deterministic verification.** A mock LLM server returns canned responses — no real API calls, no flakiness.
-- **Weighted composite score.** 5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3 conformance.
+- **Deterministic verifier.** A mock LLM server returns canned responses (no real API calls). Agents can still be non-deterministic.
+- **Weighted composite score.** Full-stack: 5% build + 5% self-test + 30% each for T1/T2/T3 conformance. Single-tier: 10% build + 10% self-test + 80% conformance.
 - **Cost-aware.** Track tokens and dollars per unit of compliance, not just raw scores.
 
 ## Tiers
 
 | Tier | Name | Spec Lines | Conformance Tests | DoD Items | Coverage | Agent Timeout | Difficulty |
 |------|------|-----------|-------------------|-----------|----------|---------------|------------|
-| 0 | Smoke Test | ~30 | 6 | 6 | 100% | 5 min | Easy |
-| 1 | Unified LLM SDK | ~2,150 | 28 | 78 | 36% | 2 hours | Hard |
+| 0 | Smoke Test | ~30 | 7 | 6 | 100% | 5 min | Easy |
+| 1 | Unified LLM SDK | ~2,150 | 35 | 78 | 36% | 2 hours | Hard |
 | 2 | Coding Agent Loop | ~1,450 | 20 | 71 | 28% | 2 hours | Hard |
 | 3 | Attractor Pipeline | ~2,080 | 28 | 89 | 31% | 2 hours | Hard |
 
@@ -33,7 +36,16 @@ Key properties:
 
 ## Leaderboard
 
-See [LEADERBOARD.md](LEADERBOARD.md) for current rankings and [RUN_LOG.md](RUN_LOG.md) for run history.
+See [LEADERBOARD.md](LEADERBOARD.md) for the current curated snapshot (narrative + bests + summary table), and [RUN_LOG.md](RUN_LOG.md) for the complete historical ledger.
+`LEADERBOARD.md` is no longer treated as an auto-generated full ranking dump.
+Curriculum subtier tasks are excluded from CLI leaderboard aggregation by default; use `--include-curriculum` to include them.
+The CLI does not auto-update `LEADERBOARD.md` or `RUN_LOG.md`; it prints tables you can paste into those files.
+
+## Versioning and Comparability
+
+- Breaking benchmark changes are versioned from this point onward.
+- Comparability decays across versions; only runs on the same benchmark version are directly comparable.
+- Historical run logs are still retained for context and trend tracking.
 
 ## Quick Start
 
@@ -58,13 +70,15 @@ The conformance tests, mock server, and scoring harness are generated locally fr
 
 ```bash
 uv run attractorbench generate --output-dir tasks
+# Optional: add curriculum subtier tasks
+uv run attractorbench generate --output-dir tasks --curriculum
 ```
 
 ### 3. Run with Harbor
 
 ```bash
 harbor run \
-  --dataset ./tasks \
+  --path ./tasks \
   --agent claude-code \
   --model anthropic/claude-sonnet-4-6 \
   --env docker \
@@ -75,6 +89,8 @@ harbor run \
 
 ```bash
 uv run attractorbench score jobs/sonnet46-full
+uv run attractorbench run-log jobs/sonnet46-full
+# Optional ad hoc analysis (does not auto-update LEADERBOARD.md):
 uv run attractorbench leaderboard jobs/sonnet46-full
 ```
 
@@ -82,69 +98,50 @@ uv run attractorbench leaderboard jobs/sonnet46-full
 
 ### Overview
 
-Each eval run follows four steps: **generate** tasks, **run** with Harbor, **score** results, **view** leaderboard. The leaderboard automatically extracts tokens, wall time, tool calls, and cost from Harbor's output files — no manual metadata needed.
+Each eval run follows four steps: **generate** tasks, **run** with Harbor, **score** results, **update run log/snapshot docs**.
+Use CLI leaderboard output for ad hoc analysis, but maintain `LEADERBOARD.md` and `RUN_LOG.md` as curated repository artifacts.
 
-### Agent/Model Mapping
+### Harbor Agents (Typical)
 
-| Model | Harbor Agent | Notes |
-|-------|-------------|-------|
-| Claude Opus 4.6 | `claude-code` | ATIF trajectory support. Strong long-context spec reading. |
-| Claude Sonnet 4.6 | `claude-code` | Faster, cheaper. Good baseline. |
-| GPT-5.3 Codex | `codex` | OpenAI's agentic coding agent. |
-| GPT-5.2 | `opencode` | Community agent wrapper for OpenAI models. |
-| Gemini 3.1 | `gemini-cli` | Google's native CLI. Long context window advantages. |
-| Any model | `openhands` | Model-agnostic agent framework. |
-| Any model | `aider` | Git-oriented agent — interesting contrast in approach. |
+| Harbor Agent | Notes |
+|-------------|-------|
+| `claude-code` | Anthropic-focused coding agent. Emits ATIF trajectories (better cache/cost breakdown when available). |
+| `codex` | OpenAI coding agent. Some configs expose an effort setting (for example OpenAI `reasoning_effort`). |
+| `gemini-cli` | Google's CLI agent. |
+| `opencode` | Multi-model wrapper agent; exact model support depends on your Harbor setup. |
+| `openhands` | Model-agnostic agent framework. |
+| `aider` | Git-oriented agent (useful contrast in workflow). |
 
-### Running a Single Agent
-
-```bash
-# 1. Generate tasks (once per benchmark version)
-uv run attractorbench generate --output-dir tasks
-
-# 2. Run the full-stack eval
-harbor run \
-  --dataset ./tasks \
-  --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
-  --env docker \
-  --job-name opus46-full
-
-# 3. Score + leaderboard
-uv run attractorbench score jobs/opus46-full
-uv run attractorbench leaderboard jobs/opus46-full
-```
+See [docs/runbook/](docs/runbook/) for per-agent setup guides, environment variables, LiteLLM status, and tips.
 
 ### Running Multiple Agents
 
 To compare agents head-to-head, run each against the same tasks and then combine on the leaderboard.
 
 ```bash
-# Generate once
-uv run attractorbench generate --output-dir tasks
-
 # Run each agent (these can run in parallel on separate machines)
-harbor run --dataset ./tasks --agent claude-code \
+harbor run --path ./tasks --agent claude-code \
   --model anthropic/claude-opus-4-6 --env docker --job-name opus46-full
 
-harbor run --dataset ./tasks --agent claude-code \
+harbor run --path ./tasks --agent claude-code \
   --model anthropic/claude-sonnet-4-6 --env docker --job-name sonnet46-full
 
-harbor run --dataset ./tasks --agent codex \
-  --model openai/gpt-5.3 --env docker --job-name gpt53-full
+harbor run --path ./tasks --agent codex \
+  --model openai/gpt-5.2 --env docker --job-name gpt52-full
 
-harbor run --dataset ./tasks --agent gemini-cli \
-  --model google/gemini-3.1 --env docker --job-name gemini31-full
+harbor run --path ./tasks --agent gemini-cli \
+  --model google/gemini-3.1-pro-preview --env docker --job-name gemini31-full
 
-# Compare all runs on a single leaderboard
+# Compare all runs ad hoc
 uv run attractorbench leaderboard jobs/opus46-full jobs/sonnet46-full \
-  jobs/gpt53-full jobs/gemini31-full
+  jobs/gpt52-full jobs/gemini31-full
 
 # Or just glob all jobs
 uv run attractorbench leaderboard jobs/*
 
-# Sort by cost efficiency
+# Sort by cost efficiency (ad hoc analysis)
 uv run attractorbench leaderboard jobs/* --sort cost
+uv run attractorbench leaderboard jobs/* --include-curriculum
 
 # Per-task detail
 uv run attractorbench compare jobs/opus46-full jobs/sonnet46-full
@@ -156,7 +153,7 @@ For parallel execution across tiers, use a cloud environment:
 
 ```bash
 harbor run \
-  --dataset ./tasks \
+  --path ./tasks \
   --agent claude-code \
   --model anthropic/claude-opus-4-6 \
   --env daytona \
@@ -166,7 +163,7 @@ harbor run \
 
 ### Efficiency Metrics
 
-The leaderboard automatically extracts efficiency metrics from Harbor's native output:
+Ad hoc CLI leaderboard output can extract efficiency metrics from Harbor's native output:
 
 - **Tokens** — from `result.json` per trial (`agent_result.n_input_tokens` + `n_output_tokens`)
 - **Time** — wall clock seconds from the agent execution phase
@@ -175,17 +172,21 @@ The leaderboard automatically extracts efficiency metrics from Harbor's native o
 
 No extra configuration needed. If an agent produces ATIF trajectories (like `claude-code`), you get full cache-aware cost breakdowns. Otherwise, cost is estimated from result.json token counts.
 
-Leaderboard columns: Agent, Model, Label, Tasks, Score, Tokens, Time, Tool Calls, Cost, Tok/Pt, $/Pt.
+Use these metrics to curate `LEADERBOARD.md` summaries and `RUN_LOG.md` history.
 
 ## Understanding Your Scores
 
 ### Composite Score
 
 ```
+# Full-stack task
 composite = 0.05 * build + 0.05 * self_test + 0.30 * T1 + 0.30 * T2 + 0.30 * T3
+
+# Single-tier tasks (tier0/tier1/tier2/tier3)
+composite = 0.10 * build + 0.10 * self_test + 0.80 * conformance
 ```
 
-The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% across three tiers) — the spec-following tests we control. Self-test credit (5%) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile scores at most 10%.
+The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% on full-stack; 80% on single-tier) — the spec-following tests we control. Self-test credit (5% full-stack; 10% single-tier) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile can still earn the build weight, but almost all of the score comes from self-tests + conformance.
 
 ### Score Interpretation (Tier 1)
 
@@ -203,7 +204,7 @@ The composite score ranges from 0.0 to 1.0. The weighting heavily favors conform
 
 ### Coverage Honesty
 
-Conformance tests sample approximately 30-35% of DoD items across tiers. The following spec sections remain untestable via CLI conformance and are not covered:
+Conformance tests sample about ~30% of DoD items (varies by tier). The following spec sections remain untestable via CLI conformance and are not covered:
 
 - **Tier 1:** Reasoning tokens, prompt caching, parity matrices (internal implementation details)
 - **Tier 2:** Tool output truncation, reasoning effort tuning, subagent orchestration (require runtime inspection)
@@ -213,11 +214,11 @@ Scores reflect tested behavior only. An agent scoring 0.85 has demonstrated stro
 
 ### Per-Section DoD Scores
 
-The `reward.json` includes per-section scores (`dod_core_infra`, `dod_generation`, `dod_tool_calling`, etc.) that reveal where an agent excels or struggles. Use these for deeper analysis:
+Per-section DoD scores are written to `reward_details.json` (next to Harbor's single-key `reward.json`) as `dod_core_infra`, `dod_generation`, `dod_tool_calling`, etc. Use these for deeper analysis:
 
 ```bash
-# View the raw reward.json
-cat jobs/<job-name>/trials/*/verifier/reward.json | python3 -m json.tool
+# Find and view a reward_details.json
+python3 -m json.tool "$(find jobs/<job-name> -name reward_details.json -print | head -n 1)"
 
 # Or use the checklist command to see what each section covers
 uv run attractorbench checklist --tier 1
@@ -225,7 +226,7 @@ uv run attractorbench checklist --tier 1
 
 ### Cost Efficiency
 
-The leaderboard computes two derived efficiency metrics:
+The CLI leaderboard computes two derived efficiency metrics:
 
 - **Tok/Pt** (tokens per point) — Total tokens / composite score. Lower is more efficient.
 - **$/Pt** (cost per point) — Total cost USD / composite score. The practical metric.
@@ -234,12 +235,19 @@ The leaderboard computes two derived efficiency metrics:
 
 ## The Specs
 
-Each tier's spec is a complete NLSpec document from the Attractor project:
+Tier 1-3 specs are vendored from the upstream Attractor project (`strongdm/attractor`) and pinned by commit for reproducibility. See [specs/UPSTREAM.json](specs/UPSTREAM.json) for the current commit.
+To refresh to the latest upstream `main`, run:
 
-### Tier 0: Smoke Test (6 conformance tests)
-Minimal plumbing validation. Tests: build, client-from-env, list-models, complete, missing-key error, schema check.
+```bash
+make specs-update
+```
 
-### Tier 1: Unified LLM SDK (28 conformance tests across 6 sections)
+Updating specs is a benchmark change; bump the benchmark version when you do this.
+
+### Tier 0: Smoke Test (7 conformance tests)
+Minimal plumbing validation. Tests: build, binary exists, client-from-env, list-models, complete, missing-key error, schema check.
+
+### Tier 1: Unified LLM SDK (35 conformance tests across 6 sections)
 - **Core Infrastructure** — Client construction, model listing, provider routing, missing-key errors
 - **Generation** — Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
 - **Tool Calling** — Tool definitions, name matching, argument validation
@@ -271,13 +279,13 @@ Minimal plumbing validation. Tests: build, client-from-env, list-models, complet
 Once published, users can reference attractorbench directly from Harbor without cloning:
 
 ```bash
-harbor run --dataset attractorbench@1.0 --agent claude-code --model anthropic/claude-opus-4-6
+harbor run --dataset attractorbench@<bench_version> --agent claude-code --model anthropic/claude-opus-4-6
 ```
 
 To use a local checkout instead:
 
 ```bash
-harbor run --dataset ./tasks --agent claude-code --model anthropic/claude-opus-4-6
+harbor run --path ./tasks --agent claude-code --model anthropic/claude-opus-4-6
 ```
 
 ## Reproducibility and Eval Contamination
@@ -292,13 +300,23 @@ For published results, we recommend:
 - Pin the agent version (e.g., `claude-code@1.0.20`)
 - Record the Harbor version and environment type
 - Note the model's training data cutoff relative to the benchmark version
-- Export ATIF trajectories for full reproducibility: `harbor traces export <job>`
+- Export ATIF trajectories for full reproducibility: `harbor traces export --path jobs/<job-name>`
+
+## Run Artifact Policy
+
+- Commit high-level benchmark outputs only:
+  - `LEADERBOARD.md`
+  - `RUN_LOG.md`
+- Do not commit raw Harbor run artifacts under `jobs/` (agent transcripts, tool logs, verifier logs, trial outputs, etc.).
+- The repository keeps `jobs/.gitkeep` so the directory exists locally, while run contents remain ignored.
+- `RUN_LOG.md` should now include benchmark version + effort setting for each run (e.g., OpenAI `reasoning_effort`).
 
 ## CLI Reference
 
 ```bash
 # Generate Harbor task directories
 uv run attractorbench generate --output-dir tasks
+uv run attractorbench generate --output-dir tasks --curriculum
 
 # Score a completed job
 uv run attractorbench score jobs/<job-name>
@@ -307,13 +325,18 @@ uv run attractorbench score jobs/<job-name>
 uv run attractorbench compare jobs/run-a jobs/run-b jobs/run-c
 
 # Leaderboard — rank agent+model combos with efficiency metrics
+# (Ad hoc analysis only; does not auto-update LEADERBOARD.md)
 uv run attractorbench leaderboard jobs/run-a jobs/run-b jobs/run-c
 uv run attractorbench leaderboard jobs/* --sort cost      # sort by cost (ascending)
 uv run attractorbench leaderboard jobs/* --sort tokens    # sort by token usage
 uv run attractorbench leaderboard jobs/* --sort time      # sort by wall time
 uv run attractorbench leaderboard jobs/* --sort efficiency # sort by tokens/point
+uv run attractorbench leaderboard jobs/* --include-curriculum
 uv run attractorbench leaderboard jobs/* --markdown       # markdown table output
 uv run attractorbench leaderboard jobs/* --json           # JSON output
+
+# Historical run ledger
+uv run attractorbench run-log jobs/run-a jobs/run-b jobs/run-c
 
 # View DoD checklists
 uv run attractorbench checklist           # all tiers
@@ -337,6 +360,7 @@ uv add --dev <package>   # dev only
 
 # Generate and inspect tasks
 uv run attractorbench generate --output-dir tasks
+uv run attractorbench generate --output-dir tasks --curriculum
 ls tasks/full-stack/
 ```
 
