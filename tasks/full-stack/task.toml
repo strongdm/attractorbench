@@ -5,13 +5,13 @@ author_name = "attractorbench"
 author_email = "attractorbench@example.com"
 difficulty = "hard"
 category = "programming"
-tags = ["nlspec", "attractor", "coding-agent", "tier2"]
+tags = ["nlspec", "attractor", "coding-agent", "full-stack", "tier1", "tier2", "tier3"]
 
 [agent]
-timeout_sec = 7200.0
+timeout_sec = 14400.0
 
 [verifier]
-timeout_sec = 600.0
+timeout_sec = 900.0
 
 [environment]
 build_timeout_sec = 300.0

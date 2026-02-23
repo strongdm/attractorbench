@@ -335,6 +335,11 @@ def build_leaderboard(job_dirs: list[Path]) -> Leaderboard:
         if cost_usd is not None and avg_composite > 0:
             cost_per_point = cost_usd / avg_composite
 
+        # Extract per-tier conformance rates (average across tasks that have them)
+        tier1_rates = [r.tier1_conformance.pass_rate for r in rewards if r.tier1_conformance is not None]
+        tier2_rates = [r.tier2_conformance.pass_rate for r in rewards if r.tier2_conformance is not None]
+        tier3_rates = [r.tier3_conformance.pass_rate for r in rewards if r.tier3_conformance is not None]
+
         entries.append(
             LeaderboardEntry(
                 agent=agent,
@@ -345,6 +350,9 @@ def build_leaderboard(job_dirs: list[Path]) -> Leaderboard:
                 avg_self_test=avg_self,
                 avg_conformance=avg_conf,
                 avg_composite=avg_composite,
+                tier1_conformance=sum(tier1_rates) / len(tier1_rates) if tier1_rates else None,
+                tier2_conformance=sum(tier2_rates) / len(tier2_rates) if tier2_rates else None,
+                tier3_conformance=sum(tier3_rates) / len(tier3_rates) if tier3_rates else None,
                 total_tokens=total_tokens,
                 wall_seconds=wall_seconds,
                 tool_calls=tool_calls,
@@ -380,14 +388,27 @@ def sort_leaderboard(leaderboard: Leaderboard, sort_by: str = "composite") -> Le
 # ---------------------------------------------------------------------------
 
 
+def _fmt_tier(rate: float | None) -> str:
+    """Format a per-tier conformance rate for display."""
+    if rate is None:
+        return "—"
+    return f"{rate:.1%}"
+
+
 def render_table(leaderboard: Leaderboard, console: Console) -> None:
     """Render the leaderboard as a Rich table."""
+    has_tiers = any(e.tier1_conformance is not None for e in leaderboard.entries)
+
     table = Table(title="Leaderboard")
     table.add_column("Agent", style="bold")
     table.add_column("Model")
     table.add_column("Label")
     table.add_column("Tasks", justify="right")
     table.add_column("Score", justify="right", style="bold")
+    if has_tiers:
+        table.add_column("T1", justify="right")
+        table.add_column("T2", justify="right")
+        table.add_column("T3", justify="right")
     table.add_column("Tokens", justify="right")
     table.add_column("Time", justify="right")
     table.add_column("Tool Calls", justify="right")
@@ -396,34 +417,57 @@ def render_table(leaderboard: Leaderboard, console: Console) -> None:
     table.add_column("$/Pt", justify="right")
 
     for e in leaderboard.entries:
-        table.add_row(
+        row = [
             e.agent,
             e.model,
             e.label,
             str(e.tasks_attempted),
             f"{e.avg_composite:.3f}",
+        ]
+        if has_tiers:
+            row.extend([
+                _fmt_tier(e.tier1_conformance),
+                _fmt_tier(e.tier2_conformance),
+                _fmt_tier(e.tier3_conformance),
+            ])
+        row.extend([
             fmt_tokens(e.total_tokens),
             fmt_time(e.wall_seconds),
             str(e.tool_calls) if e.tool_calls is not None else "—",
             fmt_cost(e.cost_usd),
             fmt_ratio(e.tokens_per_point, "tokens"),
             fmt_ratio(e.cost_per_point, "cost"),
-        )
+        ])
+        table.add_row(*row)
 
     console.print(table)
 
 
 def render_markdown(leaderboard: Leaderboard) -> str:
     """Render the leaderboard as a markdown table string."""
-    lines = [
-        "| Agent | Model | Label | Tasks | Score | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |",
-        "|-------|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|-------:|-----:|",
-    ]
+    has_tiers = any(e.tier1_conformance is not None for e in leaderboard.entries)
+
+    if has_tiers:
+        header = "| Agent | Model | Label | Tasks | Score | T1 | T2 | T3 | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |"
+        sep = "|-------|-------|-------|------:|------:|---:|---:|---:|-------:|-----:|-----------:|-----:|-------:|-----:|"
+    else:
+        header = "| Agent | Model | Label | Tasks | Score | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |"
+        sep = "|-------|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|-------:|-----:|"
+
+    lines = [header, sep]
     for e in leaderboard.entries:
         tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
+        tier_cols = ""
+        if has_tiers:
+            tier_cols = (
+                f"| {_fmt_tier(e.tier1_conformance)} "
+                f"| {_fmt_tier(e.tier2_conformance)} "
+                f"| {_fmt_tier(e.tier3_conformance)} "
+            )
         lines.append(
             f"| {e.agent} | {e.model} | {e.label} "
             f"| {e.tasks_attempted} | {e.avg_composite:.3f} "
+            f"{tier_cols}"
             f"| {fmt_tokens(e.total_tokens)} | {fmt_time(e.wall_seconds)} "
             f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "
             f"| {fmt_ratio(e.tokens_per_point, 'tokens')} "

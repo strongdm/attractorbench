@@ -38,6 +38,7 @@ def _parse_tier_numbers(raw_tiers: Optional[str]) -> list[int] | None:
 def generate(
     tiers: Annotated[Optional[str], typer.Option(help="Comma-separated tier numbers (e.g. 1,2,3)")] = None,
     output_dir: Annotated[Path, typer.Option(help="Output directory for task dirs")] = Path("tasks"),
+    individual: Annotated[bool, typer.Option("--individual", help="Generate tiers as separate tasks instead of stacked full-stack")] = False,
 ) -> None:
     """Generate Harbor-compatible task directories from specs."""
     from attractorbench.adapter import generate_tasks
@@ -50,11 +51,20 @@ def generate(
         raise typer.BadParameter(str(exc), param_hint="--tiers") from exc
 
     console.print(f"Generating tasks for {len(tier_defs)} tier(s)...")
-    generate_tasks(tier_defs, output_dir)
+    generated = generate_tasks(tier_defs, output_dir, stacked=not individual)
 
-    for tier in tier_defs:
-        task_dir = output_dir / tier.slug
-        console.print(f"  [green]✓[/green] {tier.slug}/ ({tier.total_items} DoD items, {tier.agent_timeout}s timeout)")
+    for slug in generated:
+        task_dir = output_dir / slug
+        if slug == "full-stack":
+            from attractorbench.tiers import load_stacked_tier
+            stacked = load_stacked_tier()
+            total_items = sum(t.total_items for t in stacked.tiers)
+            console.print(f"  [green]✓[/green] {slug}/ ({total_items} DoD items, {stacked.agent_timeout}s timeout)")
+        else:
+            # Find the matching tier
+            tier = next((t for t in tier_defs if t.slug == slug), None)
+            if tier:
+                console.print(f"  [green]✓[/green] {slug}/ ({tier.total_items} DoD items, {tier.agent_timeout}s timeout)")
 
     console.print(f"\nTasks written to [bold]{output_dir}[/bold]")
 
@@ -76,22 +86,38 @@ def score(
         console.print(f"[red]No reward.json files found in {job_dir}[/red]")
         raise typer.Exit(1)
 
+    # Check if any results have per-tier breakdowns
+    has_tiers = any(r.tier1_conformance is not None for r in results.values())
+
     table = Table(title=f"Results: {job_dir.name}")
     table.add_column("Task", style="bold")
     table.add_column("Build", justify="center")
     table.add_column("Self-Test", justify="right")
+    if has_tiers:
+        table.add_column("T1", justify="right")
+        table.add_column("T2", justify="right")
+        table.add_column("T3", justify="right")
     table.add_column("Conformance", justify="right")
     table.add_column("Composite", justify="right", style="bold")
 
     for task_name, reward in sorted(results.items()):
         build = "[green]✓[/green]" if reward.build_success else "[red]✗[/red]"
-        table.add_row(
+        row = [
             task_name,
             build,
             f"{reward.self_test_pass_rate:.1%}",
+        ]
+        if has_tiers:
+            for tc in (reward.tier1_conformance, reward.tier2_conformance, reward.tier3_conformance):
+                if tc is not None:
+                    row.append(f"{tc.passed}/{tc.total} ({tc.pass_rate:.1%})")
+                else:
+                    row.append("—")
+        row.extend([
             f"{reward.conformance_passed}/{reward.conformance_total} ({reward.conformance_pass_rate:.1%})",
             f"{reward.composite_score:.3f}",
-        )
+        ])
+        table.add_row(*row)
 
     console.print(table)
 

@@ -189,6 +189,34 @@ TIER_DEFS: list[TierDef] = [
 ]
 
 
+STACKED_SLUG = "full-stack"
+STACKED_AGENT_TIMEOUT = 14400  # 4 hours
+STACKED_VERIFIER_TIMEOUT = 900  # 15 minutes
+
+
+@dataclass
+class StackedTierDef:
+    """Combined task definition for tiers 1-3 in a single workspace."""
+
+    name: str  # "Full Stack"
+    slug: str  # "full-stack"
+    tiers: list[TierDef]  # [tier1, tier2, tier3], ordered
+    agent_timeout: int  # 14400
+    verifier_timeout: int  # 900
+
+
+def load_stacked_tier() -> StackedTierDef:
+    """Load tiers 1, 2, 3 and bundle them into a single stacked task."""
+    tiers = load_tiers([1, 2, 3])
+    return StackedTierDef(
+        name="Full Stack",
+        slug=STACKED_SLUG,
+        tiers=tiers,
+        agent_timeout=STACKED_AGENT_TIMEOUT,
+        verifier_timeout=STACKED_VERIFIER_TIMEOUT,
+    )
+
+
 def load_tiers(tier_numbers: list[int] | None = None) -> list[TierDef]:
     """Load tier definitions, optionally filtering by tier number."""
     tier_map = {tier.tier: tier for tier in TIER_DEFS}

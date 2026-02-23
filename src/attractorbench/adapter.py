@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from attractorbench.tiers import TierDef, load_tiers
+from attractorbench.tiers import StackedTierDef, TierDef, load_stacked_tier, load_tiers
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 
@@ -2596,6 +2596,8 @@ def tier3_tests():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--tier", type=int, required=True)
+    parser.add_argument("--output", type=str, default=RESULTS_FILE,
+                        help="Path to write conformance results JSON")
     args = parser.parse_args()
 
     tier_runners = {0: tier0_tests, 1: tier1_tests, 2: tier2_tests, 3: tier3_tests}
@@ -2625,8 +2627,9 @@ def main():
     }
 
     # Write results
-    Path(RESULTS_FILE).parent.mkdir(parents=True, exist_ok=True)
-    Path(RESULTS_FILE).write_text(json.dumps(results, indent=2))
+    output_path = Path(args.output)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(results, indent=2))
 
     # Also print summary
     print(f"\\nConformance Results: {results[\'passed\']}/{results[\'total\']} passed", file=sys.stderr)
@@ -2835,48 +2838,587 @@ if __name__ == "__main__":
 '''
 
 
-def generate_tasks(tiers: list[TierDef], output_dir: Path) -> None:
-    """Generate Harbor-compatible task directories for all tiers."""
+def generate_stacked_task_toml(stacked: StackedTierDef) -> str:
+    """Generate task.toml for the combined full-stack task."""
+    tags = ["nlspec", "attractor", "coding-agent", "full-stack"]
+    for t in stacked.tiers:
+        tags.append(f"tier{t.tier}")
+    tags_str = ", ".join(f'"{tag}"' for tag in tags)
+    return f"""version = "1.0"
+
+[metadata]
+author_name = "attractorbench"
+author_email = "attractorbench@example.com"
+difficulty = "hard"
+category = "programming"
+tags = [{tags_str}]
+
+[agent]
+timeout_sec = {stacked.agent_timeout}.0
+
+[verifier]
+timeout_sec = {stacked.verifier_timeout}.0
+
+[environment]
+build_timeout_sec = 300.0
+cpus = 2
+memory_mb = 4096
+storage_mb = 10240
+allow_internet = true
+"""
+
+
+def generate_stacked_instruction(stacked: StackedTierDef) -> str:
+    """Generate a short instruction.md that references spec files in the container.
+
+    The full specifications are large (~300KB combined) and would overwhelm
+    the agent's initial prompt.  Instead, we write them to files that the
+    Dockerfile COPYs into /workspace/specs/ and reference them here.
+    """
+    tier_map = {t.tier: t for t in stacked.tiers}
+    tier1 = tier_map[1]
+    tier2 = tier_map[2]
+    tier3 = tier_map[3]
+
+    layer_summaries = []
+    for tier in stacked.tiers:
+        conformance_contract = _conformance_contract(tier.tier)
+        dod_checklist = ""
+        for section in tier.sections:
+            dod_checklist += f"\n#### {section.number} {section.name}\n\n"
+            for item in section.items:
+                dod_checklist += f"- [ ] {item.text}\n"
+
+        layer_summaries.append(f"""## Layer {tier.tier}: {tier.name}
+
+**Full specification**: `/workspace/specs/tier{tier.tier}_spec.md` — read this file before implementing this layer.
+
+### Conformance Contract
+
+{conformance_contract}
+
+### Definition of Done
+
+{dod_checklist}
+""")
+
+    layers_text = "\n---\n\n".join(layer_summaries)
+
+    return f"""# Full Stack — attractorbench Tiers 1-3
+
+You are building three layers of a software system in one workspace.
+Each layer builds on the previous layer's implementation.
+
+**IMPORTANT**: The detailed specifications for each layer are in `/workspace/specs/`.
+Read each spec file before implementing its layer.
+
+## Architecture
+
+- **Layer 1: {tier1.name}** — multi-provider LLM client library
+- **Layer 2: {tier2.name}** — imports Layer 1's Client, Request, Response
+- **Layer 3: {tier3.name}** — imports Layer 2 as CodergenBackend
+
+## Implementation Constraints
+
+- Implement in any programming language
+- **Single codebase** — all three layers live in `/workspace`
+- Provide a **single `Makefile`** with `build` and `test` targets that build and test ALL layers
+- The conformance CLI must be at `./bin/conformance` and support ALL subcommands from all three layers
+- Layer 2 **MUST** import and use Layer 1's LLM client (not a separate HTTP client)
+- Layer 3 **MUST** import and use Layer 2's agent loop as its CodergenBackend (not call LLM directly)
+- Write your own comprehensive test suite (run via `make test`)
+- All work goes in `/workspace`
+
+---
+
+{layers_text}
+"""
+
+
+def generate_stacked_spec_files(stacked: StackedTierDef) -> dict[str, str]:
+    """Return a mapping of filename -> content for per-tier spec files.
+
+    These are placed in the environment/specs/ directory and COPYd into the
+    container at /workspace/specs/ by the Dockerfile.
+    """
+    specs: dict[str, str] = {}
+    for tier in stacked.tiers:
+        specs[f"tier{tier.tier}_spec.md"] = tier.spec_path.read_text(encoding="utf-8")
+    return specs
+
+
+def generate_stacked_dockerfile(stacked: StackedTierDef) -> str:
+    """Dockerfile for the stacked full-stack task.
+
+    Extends the base Dockerfile with a COPY of the per-tier spec files into
+    /workspace/specs/ so the agent can read them without the instruction.md
+    needing to inline all 300 KB of spec text.
+    """
+    return f"""FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    build-essential \\
+    curl \\
+    git \\
+    make \\
+    && rm -rf /var/lib/apt/lists/*
+
+# Install common language toolchains the agent might choose
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \\
+    apt-get install -y nodejs && \\
+    rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://go.dev/dl/go1.23.6.linux-amd64.tar.gz | tar -C /usr/local -xzf - && \\
+    ln -s /usr/local/go/bin/go /usr/local/bin/go
+
+ENV PATH="/usr/local/go/bin:${{PATH}}"
+
+RUN mkdir -p /workspace /workspace/specs /logs /logs/verifier /logs/agent /logs/artifacts /tests
+RUN chmod -R 777 /workspace /logs /tests
+
+# Copy tier specification files so the agent can read them at build time
+COPY specs/ /workspace/specs/
+
+WORKDIR /workspace
+"""
+
+
+def generate_stacked_test_sh(stacked: StackedTierDef) -> str:
+    """Generate test.sh for the combined full-stack task."""
+    return """#!/bin/bash
+# attractorbench Full Stack: Tiers 1-3 — Verifier
+set -uo pipefail
+set +e
+
+cleanup() {
+  if [ -n "${MOCK_PID:-}" ]; then
+    kill "$MOCK_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
+mkdir -p /logs/verifier
+
+cd /workspace
+
+# Start mock LLM server in background
+python3 /tests/mock_server.py >> /logs/verifier/mock-server.log 2>&1 &
+MOCK_PID=$!
+
+# Wait for mock server readiness
+for _ in {1..20}; do
+  if curl -fsS http://localhost:9999/health >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+
+if ! curl -fsS http://localhost:9999/health >/dev/null 2>&1; then
+  echo "Mock LLM server failed to start; conformance will likely fail." | tee -a /logs/verifier/conformance.log
+fi
+
+# === Phase 0: Harvest LiteLLM usage metrics ===
+echo "=== Phase 0: Harvest LiteLLM metrics ===" | tee /logs/verifier/harvest.log
+python3 /tests/harvest_litellm.py >> /logs/verifier/harvest.log 2>&1 || echo "Warning: LiteLLM harvest failed (non-fatal)"
+
+# Phase 1: Build check
+echo "=== Phase 1: Build ===" | tee /logs/verifier/build.log
+make build >> /logs/verifier/build.log 2>&1
+BUILD_EXIT=$?
+echo "Build exit code: $BUILD_EXIT" | tee -a /logs/verifier/build.log
+
+# Phase 2: Self-test check
+echo "=== Phase 2: Self-test ===" | tee /logs/verifier/self-test.log
+make test >> /logs/verifier/self-test.log 2>&1
+SELFTEST_EXIT=$?
+echo "Self-test exit code: $SELFTEST_EXIT" | tee -a /logs/verifier/self-test.log
+
+# Phase 3: Conformance checks (per-tier)
+export OPENAI_API_KEY=test-key
+export OPENAI_BASE_URL=http://localhost:9999/v1
+export ANTHROPIC_API_KEY=test-key
+export ANTHROPIC_BASE_URL=http://localhost:9999
+export GEMINI_API_KEY=test-key
+export GEMINI_BASE_URL=http://localhost:9999
+
+# Phase 3a: Tier 1 conformance
+echo "=== Phase 3a: Tier 1 Conformance ===" | tee /logs/verifier/conformance_tier1.log
+curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
+python3 /tests/conformance/run_conformance.py --tier 1 \
+  --output /logs/verifier/conformance_results_tier1.json >> /logs/verifier/conformance_tier1.log 2>&1
+CONF1_EXIT=$?
+echo "Tier 1 conformance exit code: $CONF1_EXIT" | tee -a /logs/verifier/conformance_tier1.log
+
+# Phase 3b: Tier 2 conformance
+echo "=== Phase 3b: Tier 2 Conformance ===" | tee /logs/verifier/conformance_tier2.log
+curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
+python3 /tests/conformance/run_conformance.py --tier 2 \
+  --output /logs/verifier/conformance_results_tier2.json >> /logs/verifier/conformance_tier2.log 2>&1
+CONF2_EXIT=$?
+echo "Tier 2 conformance exit code: $CONF2_EXIT" | tee -a /logs/verifier/conformance_tier2.log
+
+# Gate: Layer 3 is only meaningful if Layer 2's core loop works.
+# If Tier 2 can't run a basic process-input session, skip Tier 3 entirely.
+T2_CAN_ADVANCE=0
+if [ -f /logs/verifier/conformance_results_tier2.json ]; then
+  T2_CAN_ADVANCE=$(python3 - <<'PY'
+import json
+from pathlib import Path
+
+p = Path("/logs/verifier/conformance_results_tier2.json")
+try:
+    data = json.loads(p.read_text())
+except Exception:
+    print("0")
+    raise SystemExit(0)
+
+tests = data.get("tests", [])
+passed_by_name = {
+    t.get("name"): bool(t.get("passed"))
+    for t in tests
+    if isinstance(t, dict) and isinstance(t.get("name"), str)
+}
+print("1" if passed_by_name.get("process_input") else "0")
+PY
+  )
+fi
+
+if [ "${T2_CAN_ADVANCE}" != "1" ]; then
+  echo "=== Phase 3c: Tier 3 Conformance (SKIPPED) ===" | tee /logs/verifier/conformance_tier3.log
+  echo "Skipping Tier 3: Tier 2 did not pass core loop (process_input)." | tee -a /logs/verifier/conformance_tier3.log
+  cat > /logs/verifier/conformance_results_tier3.json <<'JSON'
+{"tier":3,"tests":[],"sections":{},"total":0,"passed":0,"skipped_due_to_tier2":true}
+JSON
+else
+  # Phase 3c: Tier 3 conformance
+  echo "=== Phase 3c: Tier 3 Conformance ===" | tee /logs/verifier/conformance_tier3.log
+  curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
+  python3 /tests/conformance/run_conformance.py --tier 3 \
+    --output /logs/verifier/conformance_results_tier3.json >> /logs/verifier/conformance_tier3.log 2>&1
+  CONF3_EXIT=$?
+  echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conformance_tier3.log
+fi
+
+# Aggregate into reward.json
+python3 /tests/score.py \
+  --build-exit $BUILD_EXIT \
+  --selftest-exit $SELFTEST_EXIT \
+  --selftest-log /logs/verifier/self-test.log \
+  --conformance-tier1 /logs/verifier/conformance_results_tier1.json \
+  --conformance-tier2 /logs/verifier/conformance_results_tier2.json \
+  --conformance-tier3 /logs/verifier/conformance_results_tier3.json \
+  --output /logs/verifier/reward.json
+
+echo "=== Done ==="
+cat /logs/verifier/reward.json
+
+exit 0
+"""
+
+
+def generate_stacked_score_py() -> str:
+    """Generate the in-container scoring script for the full-stack task."""
+    return '''#!/usr/bin/env python3
+"""In-container score aggregation for attractorbench full-stack task.
+
+Reads build/selftest/per-tier conformance results and produces reward.json.
+"""
+
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+
+MIN_SELF_TESTS = 5
+
+# Patterns that indicate a real test runner was used
+TEST_RUNNER_PATTERNS = [
+    r"pytest", r"go\\s+test", r"npm\\s+test", r"jest", r"cargo\\s+test",
+    r"=== RUN", r"--- PASS", r"--- FAIL", r"FAIL\\s", r"ok\\s",
+    r"\\d+\\s+passing", r"\\d+\\s+failing", r"Tests:\\s+\\d+",
+    r"test result:", r"test session starts", r"RUN\\s+Test",
+    r"\\bmocha\\b", r"\\bvitest\\b", r"\\bjunit\\b", r"\\bunittest\\b",
+]
+
+
+def detect_test_runner(log_text: str) -> bool:
+    """Check if the log contains evidence of an actual test runner."""
+    for pattern in TEST_RUNNER_PATTERNS:
+        if re.search(pattern, log_text, re.IGNORECASE | re.MULTILINE):
+            return True
+    return False
+
+
+def count_test_results(log_path: str) -> tuple[int, int]:
+    """Parse a test log to estimate pass/total counts."""
+    path = Path(log_path)
+    if not path.exists():
+        return 0, 0
+
+    text = path.read_text()
+
+    # pytest style: "X passed, Y failed"
+    m = re.search(r"(\\d+) passed", text)
+    passed = int(m.group(1)) if m else 0
+    m = re.search(r"(\\d+) failed", text)
+    failed = int(m.group(1)) if m else 0
+
+    # go test style: "ok" / "FAIL"
+    ok_count = len(re.findall(r"^ok\\s", text, re.MULTILINE))
+    fail_count = len(re.findall(r"^FAIL\\s", text, re.MULTILINE))
+    if ok_count + fail_count > passed + failed:
+        passed = ok_count
+        failed = fail_count
+
+    # npm test / jest: "Tests: X passed, Y failed"
+    m = re.search(r"Tests:\\s+(\\d+)\\s+passed", text)
+    if m:
+        passed = max(passed, int(m.group(1)))
+    m = re.search(r"Tests:\\s+.*?(\\d+)\\s+failed", text)
+    if m:
+        failed = max(failed, int(m.group(1)))
+
+    total = passed + failed
+    return passed, max(total, 1)
+
+
+def load_conformance(path: str) -> tuple[int, int, float]:
+    """Load conformance results and return (total, passed, pass_rate)."""
+    conf_path = Path(path)
+    if not conf_path.exists():
+        return 0, 0, 0.0
+    try:
+        data = json.loads(conf_path.read_text())
+    except (json.JSONDecodeError, ValueError):
+        return 0, 0, 0.0
+    tests = data.get("tests", [])
+    total = len(tests)
+    passed = sum(1 for t in tests if t.get("passed", False))
+    rate = passed / max(total, 1)
+    return total, passed, rate
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--build-exit", type=int, required=True)
+    parser.add_argument("--selftest-exit", type=int, required=True)
+    parser.add_argument("--selftest-log", type=str, default="")
+    parser.add_argument("--conformance-tier1", type=str, required=True)
+    parser.add_argument("--conformance-tier2", type=str, required=True)
+    parser.add_argument("--conformance-tier3", type=str, required=True)
+    parser.add_argument("--output", type=str, required=True)
+    args = parser.parse_args()
+
+    build_success = 1 if args.build_exit == 0 else 0
+
+    # Self-test
+    self_passed, self_total = 0, 0
+    log_text = ""
+    if args.selftest_log and Path(args.selftest_log).exists():
+        log_text = Path(args.selftest_log).read_text()
+
+    if args.selftest_exit == 0:
+        self_passed, self_total = count_test_results(args.selftest_log)
+        if self_total == 0:
+            if not detect_test_runner(log_text):
+                self_passed, self_total = 0, 1
+            else:
+                self_passed, self_total = 0, 1
+    elif args.selftest_log:
+        self_passed, self_total = count_test_results(args.selftest_log)
+
+    # Minimum test count threshold (anti-gaming)
+    if 0 < self_total < MIN_SELF_TESTS:
+        coverage_factor = self_total / MIN_SELF_TESTS
+        self_test_pass_rate = (self_passed / max(self_total, 1)) * coverage_factor
+    else:
+        self_test_pass_rate = self_passed / max(self_total, 1)
+
+    # Per-tier conformance
+    t1_total, t1_passed, t1_rate = load_conformance(args.conformance_tier1)
+    t2_total, t2_passed, t2_rate = load_conformance(args.conformance_tier2)
+    t3_total, t3_passed, t3_rate = load_conformance(args.conformance_tier3)
+
+    conf_total = t1_total + t2_total + t3_total
+    conf_passed = t1_passed + t2_passed + t3_passed
+    conf_rate = conf_passed / max(conf_total, 1)
+
+    # Composite score: 5% build + 5% self-test + 30% tier1 + 30% tier2 + 30% tier3
+    composite = (
+        0.05 * build_success
+        + 0.05 * self_test_pass_rate
+        + 0.30 * t1_rate
+        + 0.30 * t2_rate
+        + 0.30 * t3_rate
+    )
+
+    details = {
+        "build_success": build_success,
+        "self_test_pass_rate": round(self_test_pass_rate, 4),
+        "self_test_count": self_total,
+        "test_runner_detected": detect_test_runner(log_text),
+        "tier1_conformance_total": t1_total,
+        "tier1_conformance_passed": t1_passed,
+        "tier1_conformance_pass_rate": round(t1_rate, 4),
+        "tier2_conformance_total": t2_total,
+        "tier2_conformance_passed": t2_passed,
+        "tier2_conformance_pass_rate": round(t2_rate, 4),
+        "tier3_conformance_total": t3_total,
+        "tier3_conformance_passed": t3_passed,
+        "tier3_conformance_pass_rate": round(t3_rate, 4),
+        "conformance_total": conf_total,
+        "conformance_passed": conf_passed,
+        "conformance_pass_rate": round(conf_rate, 4),
+        "composite_score": round(composite, 4),
+    }
+
+    # Harbor expects reward.json with exactly one key
+    reward = {"composite_score": round(composite, 4)}
+    Path(args.output).write_text(json.dumps(reward, indent=2))
+
+    # Write detailed breakdown to a separate file for attractorbench scoring
+    details_path = Path(args.output).parent / "reward_details.json"
+    details_path.write_text(json.dumps(details, indent=2))
+
+    print(json.dumps(details, indent=2), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
+def generate_tasks(tiers: list[TierDef], output_dir: Path, *, stacked: bool = True) -> list[str]:
+    """Generate Harbor-compatible task directories for all tiers.
+
+    Returns a list of generated task directory names (slugs).
+
+    When stacked=True (default) and tiers 1, 2, 3 are all present,
+    they are merged into a single 'full-stack' task directory.
+    Tier 0 is always generated individually.
+    """
+    import stat
+
     output_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[str] = []
+
+    tier_numbers = {t.tier for t in tiers}
+    stackable = {1, 2, 3}
+    individual_tiers = []
+    do_stacked = stacked and stackable.issubset(tier_numbers)
 
     for tier in tiers:
-        task_dir = output_dir / tier.slug
-        if task_dir.exists():
-            shutil.rmtree(task_dir)
-        task_dir.mkdir(parents=True)
+        if do_stacked and tier.tier in stackable:
+            continue  # will be generated as part of full-stack
+        individual_tiers.append(tier)
 
-        # task.toml
-        (task_dir / "task.toml").write_text(generate_task_toml(tier))
+    # Generate individual tier directories
+    for tier in individual_tiers:
+        _generate_individual_task(tier, output_dir)
+        generated.append(tier.slug)
 
-        # instruction.md
-        (task_dir / "instruction.md").write_text(generate_instruction(tier))
+    # Generate stacked full-stack directory
+    if do_stacked:
+        stacked_def = load_stacked_tier()
+        _generate_stacked_task(stacked_def, output_dir)
+        generated.append(stacked_def.slug)
 
-        # environment/Dockerfile + docker-compose + litellm config
-        env_dir = task_dir / "environment"
-        env_dir.mkdir()
-        (env_dir / "Dockerfile").write_text(generate_dockerfile(tier))
-        (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
-        (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
+    return generated
 
-        # tests/
-        tests_dir = task_dir / "tests"
-        tests_dir.mkdir()
-        (tests_dir / "test.sh").write_text(generate_test_sh(tier))
-        (tests_dir / "mock_server.py").write_text(generate_mock_server())
-        (tests_dir / "score.py").write_text(generate_score_py())
-        (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
 
-        # tests/conformance/
-        conf_dir = tests_dir / "conformance"
-        conf_dir.mkdir()
-        (conf_dir / "run_conformance.py").write_text(generate_run_conformance())
+def _generate_individual_task(tier: TierDef, output_dir: Path) -> None:
+    """Generate a single Harbor task directory for one tier."""
+    import stat
 
-        # solution/ (empty placeholder)
-        solution_dir = task_dir / "solution"
-        solution_dir.mkdir()
-        (solution_dir / "solve.sh").write_text("#!/bin/bash\necho 'No oracle solution available'\nexit 1\n")
+    task_dir = output_dir / tier.slug
+    if task_dir.exists():
+        shutil.rmtree(task_dir)
+    task_dir.mkdir(parents=True)
 
-        # Make scripts executable
-        import stat
-        for script in [tests_dir / "test.sh", solution_dir / "solve.sh"]:
-            script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    # task.toml
+    (task_dir / "task.toml").write_text(generate_task_toml(tier))
+
+    # instruction.md
+    (task_dir / "instruction.md").write_text(generate_instruction(tier))
+
+    # environment/Dockerfile + docker-compose + litellm config
+    env_dir = task_dir / "environment"
+    env_dir.mkdir()
+    (env_dir / "Dockerfile").write_text(generate_dockerfile(tier))
+    (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
+    (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
+
+    # tests/
+    tests_dir = task_dir / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test.sh").write_text(generate_test_sh(tier))
+    (tests_dir / "mock_server.py").write_text(generate_mock_server())
+    (tests_dir / "score.py").write_text(generate_score_py())
+    (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
+
+    # tests/conformance/
+    conf_dir = tests_dir / "conformance"
+    conf_dir.mkdir()
+    (conf_dir / "run_conformance.py").write_text(generate_run_conformance())
+
+    # solution/ (empty placeholder)
+    solution_dir = task_dir / "solution"
+    solution_dir.mkdir()
+    (solution_dir / "solve.sh").write_text("#!/bin/bash\necho 'No oracle solution available'\nexit 1\n")
+
+    # Make scripts executable
+    for script in [tests_dir / "test.sh", solution_dir / "solve.sh"]:
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+
+
+def _generate_stacked_task(stacked: StackedTierDef, output_dir: Path) -> None:
+    """Generate the combined full-stack Harbor task directory."""
+    import stat
+
+    task_dir = output_dir / stacked.slug
+    if task_dir.exists():
+        shutil.rmtree(task_dir)
+    task_dir.mkdir(parents=True)
+
+    # task.toml
+    (task_dir / "task.toml").write_text(generate_stacked_task_toml(stacked))
+
+    # instruction.md (short — refs /workspace/specs/ for full text)
+    (task_dir / "instruction.md").write_text(generate_stacked_instruction(stacked))
+
+    # environment/Dockerfile + docker-compose + litellm config
+    env_dir = task_dir / "environment"
+    env_dir.mkdir()
+    (env_dir / "Dockerfile").write_text(generate_stacked_dockerfile(stacked))
+    (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
+    (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
+
+    # environment/specs/ — per-tier specification files (COPYd into container)
+    specs_dir = env_dir / "specs"
+    specs_dir.mkdir()
+    for filename, content in generate_stacked_spec_files(stacked).items():
+        (specs_dir / filename).write_text(content)
+
+    # tests/
+    tests_dir = task_dir / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test.sh").write_text(generate_stacked_test_sh(stacked))
+    (tests_dir / "mock_server.py").write_text(generate_mock_server())
+    (tests_dir / "score.py").write_text(generate_stacked_score_py())
+    (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
+
+    # tests/conformance/
+    conf_dir = tests_dir / "conformance"
+    conf_dir.mkdir()
+    (conf_dir / "run_conformance.py").write_text(generate_run_conformance())
+
+    # solution/ (empty placeholder)
+    solution_dir = task_dir / "solution"
+    solution_dir.mkdir()
+    (solution_dir / "solve.sh").write_text("#!/bin/bash\necho 'No oracle solution available'\nexit 1\n")
+
+    # Make scripts executable
+    for script in [tests_dir / "test.sh", solution_dir / "solve.sh"]:
+        script.chmod(script.stat().st_mode | stat.S_IEXEC)

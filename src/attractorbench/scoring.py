@@ -10,6 +10,15 @@ from typing import Any
 
 
 @dataclass
+class TierConformance:
+    """Per-tier conformance breakdown (for full-stack tasks)."""
+
+    total: int = 0
+    passed: int = 0
+    pass_rate: float = 0.0
+
+
+@dataclass
 class RewardData:
     """Parsed reward.json from a single task trial."""
 
@@ -21,6 +30,10 @@ class RewardData:
     conformance_pass_rate: float = 0.0
     dod_scores: dict[str, float] = field(default_factory=dict)
     composite_score: float = 0.0
+    # Per-tier conformance breakdowns (populated for full-stack tasks)
+    tier1_conformance: TierConformance | None = None
+    tier2_conformance: TierConformance | None = None
+    tier3_conformance: TierConformance | None = None
 
     @classmethod
     def from_file(cls, path: Path) -> RewardData:
@@ -31,6 +44,18 @@ class RewardData:
         else:
             data = json.loads(path.read_text(encoding="utf-8"))
         dod = {k: v for k, v in data.items() if k.startswith("dod_")}
+
+        # Parse per-tier conformance breakdowns if present
+        tier_breakdowns: dict[int, TierConformance] = {}
+        for tier_num in (1, 2, 3):
+            total_key = f"tier{tier_num}_conformance_total"
+            if total_key in data:
+                tier_breakdowns[tier_num] = TierConformance(
+                    total=data.get(total_key, 0),
+                    passed=data.get(f"tier{tier_num}_conformance_passed", 0),
+                    pass_rate=data.get(f"tier{tier_num}_conformance_pass_rate", 0.0),
+                )
+
         return cls(
             build_success=data.get("build_success", 0),
             self_test_pass_rate=data.get("self_test_pass_rate", 0.0),
@@ -40,6 +65,9 @@ class RewardData:
             conformance_pass_rate=data.get("conformance_pass_rate", 0.0),
             dod_scores=dod,
             composite_score=data.get("composite_score", 0.0),
+            tier1_conformance=tier_breakdowns.get(1),
+            tier2_conformance=tier_breakdowns.get(2),
+            tier3_conformance=tier_breakdowns.get(3),
         )
 
 
@@ -113,7 +141,7 @@ def compare_jobs(job_dirs: list[Path]) -> list[dict[str, Any]]:
     return rows
 
 
-_TASK_SLUG_RE = re.compile(r"^tier\d+-[a-z0-9-]+$")
+_TASK_SLUG_RE = re.compile(r"^(tier\d+-[a-z0-9-]+|full-stack)$")
 
 
 def _infer_task_name(reward_file: Path, job_dir: Path) -> str:

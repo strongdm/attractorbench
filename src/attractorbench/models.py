@@ -36,6 +36,10 @@ class LeaderboardEntry(BaseModel):
     wall_seconds: float | None = None
     tool_calls: int | None = None
     cost_usd: float | None = None
+    # Per-tier conformance rates (populated for full-stack tasks)
+    tier1_conformance: float | None = None
+    tier2_conformance: float | None = None
+    tier3_conformance: float | None = None
     # Derived (computed if inputs available)
     tokens_per_point: float | None = None  # total_tokens / avg_composite
     cost_per_point: float | None = None  # cost_usd / avg_composite

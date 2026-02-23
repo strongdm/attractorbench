@@ -17,7 +17,10 @@ RUN curl -fsSL https://go.dev/dl/go1.23.6.linux-amd64.tar.gz | tar -C /usr/local
 
 ENV PATH="/usr/local/go/bin:${PATH}"
 
-RUN mkdir -p /workspace /logs /logs/verifier /logs/agent /logs/artifacts /tests
+RUN mkdir -p /workspace /workspace/specs /logs /logs/verifier /logs/agent /logs/artifacts /tests
 RUN chmod -R 777 /workspace /logs /tests
+
+# Copy tier specification files so the agent can read them at build time
+COPY specs/ /workspace/specs/
 
 WORKDIR /workspace
