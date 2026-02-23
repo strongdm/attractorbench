@@ -25,7 +25,7 @@ Benchmark for measuring coding agent compliance with the Attractor NLSpec suite.
 - Harbor task format v1.0: task.toml, instruction.md, environment/Dockerfile, tests/test.sh
 - Conformance tests are language-agnostic (exercise implementations via CLI contract)
 - test.sh always exits 0; pass/fail communicated via /logs/verifier/reward.json
-- Composite score: 10% build + 20% self-test + 70% conformance
+- Composite score: 5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3
 - LiteLLM proxy sidecar in every task (docker-compose.yaml) for automatic token/cost tracking
 
 ## Commands
@@ -36,6 +36,7 @@ All commands are run through `uv run`:
 - `uv run attractorbench score` — Score a completed Harbor job
 - `uv run attractorbench compare` — Compare results across runs
 - `uv run attractorbench leaderboard` — Rank agent+model combinations across runs
+- `uv run attractorbench run-log` — Per-job benchmark run history
 - `uv run attractorbench checklist` — List DoD checklists
 - `uv run pytest tests/ -v` — Run unit tests
 
@@ -43,7 +44,16 @@ All commands are run through `uv run`:
 
 ```bash
 uv sync  # install dependencies
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+uv run attractorbench generate --output-dir tasks
 harbor run --dataset ./tasks --agent claude-code --model anthropic/claude-opus-4-6 --env docker
 uv run attractorbench score jobs/<job-name>
 ```
+
+## After Each Run
+
+After scoring a Harbor job, regenerate the results files:
+
+    make results
+
+This updates LEADERBOARD.md and RUN_LOG.md from all jobs in jobs/.
+Commit the updated files along with any new job data.

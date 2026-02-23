@@ -13,7 +13,7 @@ Scoring is granular, not pass/fail. Each tier has multiple conformance tests gro
 Key properties:
 - **Language-agnostic.** Agents choose their own implementation language. The only contract is `make build`, `make test`, and `./bin/conformance <subcommand>`.
 - **Deterministic verification.** A mock LLM server returns canned responses — no real API calls, no flakiness.
-- **Weighted composite score.** 10% build success + 10% self-test pass rate + 80% conformance tests.
+- **Weighted composite score.** 5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3 conformance.
 - **Cost-aware.** Track tokens and dollars per unit of compliance, not just raw scores.
 
 ## Tiers
@@ -33,15 +33,7 @@ Key properties:
 
 ## Leaderboard
 
-See **[LEADERBOARD.md](LEADERBOARD.md)** for full results with per-tier breakdowns, token counts, cost, and efficiency metrics.
-
-Summary from initial runs (Sonnet 4.6, Docker environment):
-
-| Agent | Model | Tasks | Score | Tokens | Time | Cost | $/Pt |
-|-------|-------|------:|------:|-------:|-----:|-----:|-----:|
-| claude-code | claude-sonnet-4-6 | 3 | 0.577 | 23.9M | 53m51s | $9.19 | $15.92 |
-
-Sonnet 4.6 builds reliably across all tiers and writes strong self-tests. Conformance drops with spec complexity. See LEADERBOARD.md for the full breakdown.
+See [LEADERBOARD.md](LEADERBOARD.md) for current rankings and [RUN_LOG.md](RUN_LOG.md) for run history.
 
 ## Quick Start
 
@@ -65,24 +57,12 @@ uv sync   # installs all dependencies into a local .venv
 The conformance tests, mock server, and scoring harness are generated locally from `src/attractorbench/adapter.py` — they are not checked into the repo to avoid eval contamination. You must run this step before using Harbor.
 
 ```bash
-# Recommended first run: just Tier 0 to validate plumbing
-uv run attractorbench generate --tiers 0 --output-dir tasks
-
-# Or generate everything
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+uv run attractorbench generate --output-dir tasks
 ```
 
 ### 3. Run with Harbor
 
 ```bash
-# Smoke test first — validates the whole pipeline in ~5 minutes
-harbor run \
-  --dataset ./tasks/tier0-smoke-test \
-  --agent claude-code \
-  --model anthropic/claude-sonnet-4-6 \
-  --env docker
-
-# Full eval — all tiers, 2-hour timeout per tier
 harbor run \
   --dataset ./tasks \
   --agent claude-code \
@@ -120,16 +100,9 @@ Each eval run follows four steps: **generate** tasks, **run** with Harbor, **sco
 
 ```bash
 # 1. Generate tasks (once per benchmark version)
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+uv run attractorbench generate --output-dir tasks
 
-# 2. Smoke test first (always)
-harbor run \
-  --dataset ./tasks/tier0-smoke-test \
-  --agent claude-code \
-  --model anthropic/claude-opus-4-6 \
-  --env docker
-
-# 3. Full eval — all tiers at once
+# 2. Run the full-stack eval
 harbor run \
   --dataset ./tasks \
   --agent claude-code \
@@ -137,7 +110,7 @@ harbor run \
   --env docker \
   --job-name opus46-full
 
-# 4. Score + leaderboard
+# 3. Score + leaderboard
 uv run attractorbench score jobs/opus46-full
 uv run attractorbench leaderboard jobs/opus46-full
 ```
@@ -148,7 +121,7 @@ To compare agents head-to-head, run each against the same tasks and then combine
 
 ```bash
 # Generate once
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+uv run attractorbench generate --output-dir tasks
 
 # Run each agent (these can run in parallel on separate machines)
 harbor run --dataset ./tasks --agent claude-code \
@@ -209,10 +182,10 @@ Leaderboard columns: Agent, Model, Label, Tasks, Score, Tokens, Time, Tool Calls
 ### Composite Score
 
 ```
-composite = 0.10 * build_success + 0.10 * self_test_pass_rate + 0.80 * conformance_pass_rate
+composite = 0.05 * build + 0.05 * self_test + 0.30 * T1 + 0.30 * T2 + 0.30 * T3
 ```
 
-The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (80%) — the spec-following tests we control. Self-test credit (10%) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile scores at most 10%.
+The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% across three tiers) — the spec-following tests we control. Self-test credit (5%) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile scores at most 10%.
 
 ### Score Interpretation (Tier 1)
 
@@ -325,7 +298,7 @@ For published results, we recommend:
 
 ```bash
 # Generate Harbor task directories
-uv run attractorbench generate --tiers 0,1,2,3 --output-dir tasks
+uv run attractorbench generate --output-dir tasks
 
 # Score a completed job
 uv run attractorbench score jobs/<job-name>
@@ -363,9 +336,8 @@ uv add <package>         # runtime
 uv add --dev <package>   # dev only
 
 # Generate and inspect tasks
-uv run attractorbench generate --tiers 0,1 --output-dir tasks
-ls tasks/tier0-smoke-test/
-ls tasks/tier1-unified-llm/
+uv run attractorbench generate --output-dir tasks
+ls tasks/full-stack/
 ```
 
 ## License

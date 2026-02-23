@@ -250,7 +250,7 @@ def leaderboard(
     if json_output:
         console.print(lb.model_dump_json(indent=2))
     elif markdown:
-        console.print(render_markdown(lb))
+        print(render_markdown(lb))
     else:
         render_table(lb, console)
 
@@ -285,7 +285,7 @@ def run_log(
     if json_output:
         console.print(json.dumps([e.model_dump() for e in entries], indent=2))
     elif markdown:
-        console.print(render_run_log_markdown(entries))
+        print(render_run_log_markdown(entries))
     else:
         render_run_log_table(entries, console)
 

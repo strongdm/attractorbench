@@ -288,11 +288,14 @@ class TestRenderMarkdown(unittest.TestCase):
             md = render_markdown(lb)
 
             lines = md.strip().split("\n")
-            # Header + separator + at least one data row
-            self.assertGreaterEqual(len(lines), 3)
-            # All lines start with |
-            for line in lines:
-                self.assertTrue(line.startswith("|"))
+            # Title header + blank + description + blank + table header + separator + data row
+            self.assertGreaterEqual(len(lines), 7)
+            # Title line present
+            self.assertTrue(lines[0].startswith("# "))
+            # Table lines start and end with |
+            table_lines = [l for l in lines if l.startswith("|")]
+            self.assertGreaterEqual(len(table_lines), 3)
+            for line in table_lines:
                 self.assertTrue(line.endswith("|"))
             # Check content appears
             self.assertIn("claude-code", md)

@@ -454,7 +454,15 @@ def render_markdown(leaderboard: Leaderboard) -> str:
         header = "| Agent | Model | Label | Tasks | Score | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |"
         sep = "|-------|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|-------:|-----:|"
 
-    lines = [header, sep]
+    lines = [
+        "# AttractorBench Leaderboard",
+        "",
+        "Agent+model rankings across benchmark runs. Score is the composite "
+        "(5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3).",
+        "",
+        header,
+        sep,
+    ]
     for e in leaderboard.entries:
         tool_calls_str = str(e.tool_calls) if e.tool_calls is not None else "—"
         tier_cols = ""
@@ -563,6 +571,10 @@ def render_run_log_table(entries: list[RunLogEntry], console: Console) -> None:
 def render_run_log_markdown(entries: list[RunLogEntry]) -> str:
     """Render the run log as a markdown table string."""
     lines = [
+        "# AttractorBench Run Log",
+        "",
+        "Per-job benchmark run history with scores, token usage, and cost.",
+        "",
         "| Run | Agent | Model | Tasks | Score | Tokens | Time | Tool Calls | Cost | Date |",
         "|-----|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|------|",
     ]
