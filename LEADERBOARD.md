@@ -2,7 +2,7 @@
 
 **As of date:** 2026-02-23
 
-This file is a **curated summary snapshot**, not an auto-generated full ranking dump.
+This file is a **curated summary snapshot** (manually maintained, see [docs/runbook/](docs/runbook/)).
 For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
 
 Comparability policy:

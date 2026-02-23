@@ -244,31 +244,31 @@ Updating specs is a benchmark change; bump the benchmark version when you do thi
 Minimal plumbing validation. Tests: build, binary exists, client-from-env, list-models, complete, missing-key error, schema check.
 
 ### Tier 1: Unified LLM SDK (35 conformance tests across 6 sections)
-- **Core Infrastructure**:Client construction, model listing, provider routing, missing-key errors
-- **Generation**:Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
-- **Tool Calling**:Tool definitions, name matching, argument validation
-- **Provider Adapters**:OpenAI, Anthropic, and Gemini routing; cross-provider tool calls and streaming
-- **Message & Content Model**:Text-only, multimodal, and tool-result-roundtrip messages
-- **Error Handling**:Invalid requests, rate limits, auth errors
+- **Core Infrastructure**: Client construction, model listing, provider routing, missing-key errors
+- **Generation**: Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
+- **Tool Calling**: Tool definitions, name matching, argument validation
+- **Provider Adapters**: OpenAI, Anthropic, and Gemini routing; cross-provider tool calls and streaming
+- **Message & Content Model**: Text-only, multimodal, and tool-result-roundtrip messages
+- **Error Handling**: Invalid requests, rate limits, auth errors
 
 ### Tier 2: Coding Agent Loop (20 conformance tests across 7 sections)
-- **Core Loop**:Session creation with ID fields, agentic processing with LLM calls, natural completion
-- **Tool Execution**:Tool dispatch with result fields, unknown tools, malformed args, shell and file tools
-- **Event System**:Typed events, lifecycle markers, minimum count
-- **Steering**:Mid-session injection with acknowledgment
-- **System Prompts**:System message presence in mock requests
-- **Error Handling**:Graceful connection failure
-- **Execution Environment**:Shell commands and file operations
+- **Core Loop**: Session creation with ID fields, agentic processing with LLM calls, natural completion
+- **Tool Execution**: Tool dispatch with result fields, unknown tools, malformed args, shell and file tools
+- **Event System**: Typed events, lifecycle markers, minimum count
+- **Steering**: Mid-session injection with acknowledgment
+- **System Prompts**: System message presence in mock requests
+- **Error Handling**: Graceful connection failure
+- **Execution Environment**: Shell commands and file operations
 
 ### Tier 3: Attractor Pipeline (28 conformance tests across 8 sections)
-- **DOT Parsing**:Simple, attributed, conditional, chained, commented, subgraph, and default-inherited graphs
-- **Validation**:Missing start/exit nodes, bad edge refs, orphan detection, missing prompts
-- **Execution Engine**:Linear, conditional, and goal-gated pipelines; status fields, terminal stopping, branch selection
-- **Goal Gate**:Goal gate enforcement and failure handling
-- **Node Handlers**:Handler type registry with required types
-- **Retry Logic**:Max retries enforcement
-- **State/Context**:Execution context and trace
-- **Condition Expressions**:Parsed condition attributes
+- **DOT Parsing**: Simple, attributed, conditional, chained, commented, subgraph, and default-inherited graphs
+- **Validation**: Missing start/exit nodes, bad edge refs, orphan detection, missing prompts
+- **Execution Engine**: Linear, conditional, and goal-gated pipelines; status fields, terminal stopping, branch selection
+- **Goal Gate**: Goal gate enforcement and failure handling
+- **Node Handlers**: Handler type registry with required types
+- **Retry Logic**: Max retries enforcement
+- **State/Context**: Execution context and trace
+- **Condition Expressions**: Parsed condition attributes
 
 ## Harbor Registry
 

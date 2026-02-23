@@ -9,8 +9,8 @@ dist/
 .ruff_cache/
 .pytest_cache/
 
-# Generated task internals — kept out of public repo to avoid eval contamination.
+# Generated tasks: kept out of public repo to avoid eval contamination.
 # The generator in src/attractorbench/adapter.py is the source of truth.
 # Run `uv run attractorbench generate` to produce these locally.
-tasks/*/tests/
-tasks/*/solution/
+tasks/*
+!tasks/.gitkeep
