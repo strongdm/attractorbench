@@ -17,8 +17,8 @@ Previously, gemini-cli bypassed the LiteLLM proxy and called Google APIs directl
 
 ### What was changed
 
-1. **adapter.py** — Added `GOOGLE_GEMINI_BASE_URL=http://litellm:4000/gemini` to docker-compose service environment.
-2. **Harbor gemini_cli.py** — Added `GOOGLE_GEMINI_BASE_URL` to the `auth_vars` list so it's forwarded into the container's exec environment.
+1. **adapter.py**: Added `GOOGLE_GEMINI_BASE_URL=http://litellm:4000/gemini` to docker-compose service environment.
+2. **Harbor gemini_cli.py**: Added `GOOGLE_GEMINI_BASE_URL` to the `auth_vars` list so it's forwarded into the container's exec environment.
 
 ## Makefile Targets
 
@@ -56,9 +56,9 @@ make run-gemini25pro V=1   # google/gemini-2.5-pro
 
 ## Known Issues
 
-- **ARG_MAX** — Harbor's gemini_cli.py needs a local patch for large instructions (>64KB). The patch adds `_chunk_write_commands` and stdin pipe invocation. This is a LOCAL PATCH that will be lost on Harbor reinstall/upgrade.
-- **Shebang stripping** — gemini-2.5-pro has been observed stripping `#!/usr/bin/env python3` from `bin/conformance`, causing `Exec format error` and zeroing all conformance scores.
-- **Tool noise** — Gemini agents sometimes produce excessive `write_todos` and `pgrep not found` errors that consume context budget.
+- **ARG_MAX**: Harbor's gemini_cli.py needs a local patch for large instructions (>64KB). The patch adds `_chunk_write_commands` and stdin pipe invocation. This is a LOCAL PATCH that will be lost on Harbor reinstall/upgrade.
+- **Shebang stripping**: gemini-2.5-pro has been observed stripping `#!/usr/bin/env python3` from `bin/conformance`, causing `Exec format error` and zeroing all conformance scores.
+- **Tool noise**: Gemini agents sometimes produce excessive `write_todos` and `pgrep not found` errors that consume context budget.
 
 ## Tips
 

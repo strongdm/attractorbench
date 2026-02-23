@@ -13,7 +13,7 @@ Quick-reference index for running AttractorBench with each supported Harbor agen
 
 ## Common Workflow
 
-Every run follows the same four steps:
+Every run follows the same steps:
 
 ```bash
 # 1. Generate tasks (idempotent)
@@ -21,9 +21,10 @@ make generate
 
 # 2. Run with Harbor (pick a target)
 make run-sonnet V=1
+# Makefile chains: generate -> harbor run -> score -> make results
 
-# 3. (Automatic) Score + update results
-#    The Makefile targets chain: generate -> harbor run -> score -> results
+# 3. Curate LEADERBOARD.md and RUN_LOG.md
+#    See docs/runbook/leaderboard.md for the full process
 ```
 
 Or use individual Makefile targets:

@@ -2,7 +2,7 @@
 
 Benchmark for measuring how well coding agents implement systems from natural language specifications.
 
-Most coding benchmarks test whether an agent can fix a bug or write a function. AttractorBench tests whether an agent can read a 2,000-line system specification and build a conformant implementation from scratch. The specs come from [strongdm/attractor](https://github.com/strongdm/attractor) — a real production project, not synthetic puzzles.
+Most coding benchmarks test whether an agent can fix a bug or write a function. AttractorBench tests whether an agent can read a 2,000-line system specification and build a conformant implementation from scratch. The specs come from [strongdm/attractor](https://github.com/strongdm/attractor), a real production project with real production complexity.
 
 > [!IMPORTANT]
 > **NOTE (02-23-2026):** We are still tuning AttractorBench and do not regard current scores/totals as **valid for ranking** until we complete additional burn-in runs to characterize run-to-run variability.
@@ -11,13 +11,13 @@ Most coding benchmarks test whether an agent can fix a bug or write a function. 
 
 **Spec-following ability.** Given a detailed NLSpec (natural language specification), can the agent produce a working system that satisfies the Definition of Done (DoD) checklist?
 
-Scoring is granular, not pass/fail. Each tier has multiple conformance tests grouped by DoD section, so you can see exactly where an agent excels or breaks down: "it nailed the provider adapters but botched streaming and completely missed structured output."
+Scoring is granular. Each tier has multiple conformance tests grouped by DoD section, so you can see exactly where an agent excels or breaks down: "it nailed the provider adapters but botched streaming and completely missed structured output."
 
 Key properties:
 - **Language-agnostic.** Agents choose their own implementation language. The only contract is `make build`, `make test`, and `./bin/conformance <subcommand>`.
 - **Deterministic verifier.** A mock LLM server returns canned responses (no real API calls). Agents can still be non-deterministic.
 - **Weighted composite score.** Full-stack: 5% build + 5% self-test + 30% each for T1/T2/T3 conformance. Single-tier: 10% build + 10% self-test + 80% conformance.
-- **Cost-aware.** Track tokens and dollars per unit of compliance, not just raw scores.
+- **Cost-aware.** Track tokens and dollars per unit of compliance alongside raw scores.
 
 ## Tiers
 
@@ -28,7 +28,7 @@ Key properties:
 | 2 | Coding Agent Loop | ~1,450 | 20 | 104 | 19% | 2 hours | Hard |
 | 3 | Attractor Pipeline | ~2,080 | 28 | 98 | 29% | 2 hours | Hard |
 
-**Tier 0** validates plumbing — your Harbor integration, the mock server, and the scoring pipeline all work before you spend 30 minutes on a real run.
+**Tier 0** validates plumbing: your Harbor integration, the mock server, and the scoring pipeline all work before you spend 30 minutes on a real run.
 
 **Tier 1** is the flagship benchmark. It asks the agent to implement a multi-provider LLM client library (OpenAI, Anthropic, Gemini) with streaming, tool calling, structured output, and error handling. Complex enough to differentiate agents, fast enough to iterate on.
 
@@ -36,10 +36,8 @@ Key properties:
 
 ## Leaderboard
 
-See [LEADERBOARD.md](LEADERBOARD.md) for the current curated snapshot (narrative + bests + summary table), and [RUN_LOG.md](RUN_LOG.md) for the complete historical ledger.
-`LEADERBOARD.md` is no longer treated as an auto-generated full ranking dump.
-Curriculum subtier tasks are excluded from CLI leaderboard aggregation by default; use `--include-curriculum` to include them.
-The CLI does not auto-update `LEADERBOARD.md` or `RUN_LOG.md`; it prints tables you can paste into those files.
+See [LEADERBOARD.md](LEADERBOARD.md) for the current curated snapshot and [RUN_LOG.md](RUN_LOG.md) for the complete historical ledger.
+Both files are manually curated; see [docs/runbook/leaderboard.md](docs/runbook/leaderboard.md) for the update process.
 
 ## Versioning and Comparability
 
@@ -52,7 +50,7 @@ The CLI does not auto-update `LEADERBOARD.md` or `RUN_LOG.md`; it prints tables 
 ### Prerequisites
 
 - Python 3.11+
-- [uv](https://docs.astral.sh/uv/) — manages all Python dependencies; no manual `pip install` needed
+- [uv](https://docs.astral.sh/uv/): manages all Python dependencies; no manual `pip install` needed
 - [Harbor](https://github.com/harbor-ai/harbor) installed and configured
 - Docker (or a Harbor-supported cloud environment)
 
@@ -66,7 +64,7 @@ uv sync   # installs all dependencies into a local .venv
 
 ### 2. Generate task directories
 
-The conformance tests, mock server, and scoring harness are generated locally from `src/attractorbench/adapter.py` — they are not checked into the repo to avoid eval contamination. You must run this step before using Harbor.
+The conformance tests, mock server, and scoring harness are generated locally from `src/attractorbench/adapter.py` and are intentionally excluded from the repo to avoid eval contamination. You must run this step before using Harbor.
 
 ```bash
 uv run attractorbench generate --output-dir tasks
@@ -165,14 +163,12 @@ harbor run \
 
 Ad hoc CLI leaderboard output can extract efficiency metrics from Harbor's native output:
 
-- **Tokens** — from `result.json` per trial (`agent_result.n_input_tokens` + `n_output_tokens`)
-- **Time** — wall clock seconds from the agent execution phase
-- **Tool Calls** — counted from `agent/trajectory.json` steps (ATIF format)
-- **Cost** — computed from token counts using litellm pricing tables, including cache token discounts
+- **Tokens**: from `result.json` per trial (`agent_result.n_input_tokens` + `n_output_tokens`)
+- **Time**: wall clock seconds from the agent execution phase
+- **Tool Calls**: counted from `agent/trajectory.json` steps (ATIF format)
+- **Cost**: computed from token counts using litellm pricing tables, including cache token discounts
 
 No extra configuration needed. If an agent produces ATIF trajectories (like `claude-code`), you get full cache-aware cost breakdowns. Otherwise, cost is estimated from result.json token counts.
-
-Use these metrics to curate `LEADERBOARD.md` summaries and `RUN_LOG.md` history.
 
 ## Understanding Your Scores
 
@@ -186,7 +182,7 @@ composite = 0.05 * build + 0.05 * self_test + 0.30 * T1 + 0.30 * T2 + 0.30 * T3
 composite = 0.10 * build + 0.10 * self_test + 0.80 * conformance
 ```
 
-The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% on full-stack; 80% on single-tier) — the spec-following tests we control. Self-test credit (5% full-stack; 10% single-tier) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile can still earn the build weight, but almost all of the score comes from self-tests + conformance.
+The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% on full-stack; 80% on single-tier), i.e. the spec-following tests we control. Self-test credit (5% full-stack; 10% single-tier) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile can still earn the build weight, but almost all of the score comes from self-tests + conformance.
 
 ### Score Interpretation (Tier 1)
 
@@ -198,7 +194,7 @@ The composite score ranges from 0.0 to 1.0. The weighting heavily favors conform
 | 0.40 | Core completions work, basic schema validation passes |
 | 0.55 | Streaming, tool calling, and provider routing work |
 | 0.70 | Most conformance tests pass, mock server actually called |
-| 0.85+ | Near-complete spec compliance — impressive |
+| 0.85+ | Near-complete spec compliance |
 
 **A score of 0.3-0.4 on Tier 1 is respectable.** Implementing a multi-provider LLM SDK from a 2,000-line spec in 30 minutes is genuinely hard.
 
@@ -228,8 +224,8 @@ uv run attractorbench checklist --tier 1
 
 The CLI leaderboard computes two derived efficiency metrics:
 
-- **Tok/Pt** (tokens per point) — Total tokens / composite score. Lower is more efficient.
-- **$/Pt** (cost per point) — Total cost USD / composite score. The practical metric.
+- **Tok/Pt** (tokens per point): Total tokens / composite score. Lower is more efficient.
+- **$/Pt** (cost per point): Total cost USD / composite score. The practical metric.
 
 "Agent X scores 0.6 at $2.40/run; Agent Y scores 0.7 at $18/run" is a more useful comparison than raw scores alone.
 
@@ -248,31 +244,31 @@ Updating specs is a benchmark change; bump the benchmark version when you do thi
 Minimal plumbing validation. Tests: build, binary exists, client-from-env, list-models, complete, missing-key error, schema check.
 
 ### Tier 1: Unified LLM SDK (35 conformance tests across 6 sections)
-- **Core Infrastructure** — Client construction, model listing, provider routing, missing-key errors
-- **Generation** — Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
-- **Tool Calling** — Tool definitions, name matching, argument validation
-- **Provider Adapters** — OpenAI, Anthropic, and Gemini routing; cross-provider tool calls and streaming
-- **Message & Content Model** — Text-only, multimodal, and tool-result-roundtrip messages
-- **Error Handling** — Invalid requests, rate limits, auth errors
+- **Core Infrastructure**:Client construction, model listing, provider routing, missing-key errors
+- **Generation**:Blocking completions, streaming (delta+terminal), structured output, usage fields, response IDs
+- **Tool Calling**:Tool definitions, name matching, argument validation
+- **Provider Adapters**:OpenAI, Anthropic, and Gemini routing; cross-provider tool calls and streaming
+- **Message & Content Model**:Text-only, multimodal, and tool-result-roundtrip messages
+- **Error Handling**:Invalid requests, rate limits, auth errors
 
 ### Tier 2: Coding Agent Loop (20 conformance tests across 7 sections)
-- **Core Loop** — Session creation with ID fields, agentic processing with LLM calls, natural completion
-- **Tool Execution** — Tool dispatch with result fields, unknown tools, malformed args, shell and file tools
-- **Event System** — Typed events, lifecycle markers, minimum count
-- **Steering** — Mid-session injection with acknowledgment
-- **System Prompts** — System message presence in mock requests
-- **Error Handling** — Graceful connection failure
-- **Execution Environment** — Shell commands and file operations
+- **Core Loop**:Session creation with ID fields, agentic processing with LLM calls, natural completion
+- **Tool Execution**:Tool dispatch with result fields, unknown tools, malformed args, shell and file tools
+- **Event System**:Typed events, lifecycle markers, minimum count
+- **Steering**:Mid-session injection with acknowledgment
+- **System Prompts**:System message presence in mock requests
+- **Error Handling**:Graceful connection failure
+- **Execution Environment**:Shell commands and file operations
 
 ### Tier 3: Attractor Pipeline (28 conformance tests across 8 sections)
-- **DOT Parsing** — Simple, attributed, conditional, chained, commented, subgraph, and default-inherited graphs
-- **Validation** — Missing start/exit nodes, bad edge refs, orphan detection, missing prompts
-- **Execution Engine** — Linear, conditional, and goal-gated pipelines; status fields, terminal stopping, branch selection
-- **Goal Gate** — Goal gate enforcement and failure handling
-- **Node Handlers** — Handler type registry with required types
-- **Retry Logic** — Max retries enforcement
-- **State/Context** — Execution context and trace
-- **Condition Expressions** — Parsed condition attributes
+- **DOT Parsing**:Simple, attributed, conditional, chained, commented, subgraph, and default-inherited graphs
+- **Validation**:Missing start/exit nodes, bad edge refs, orphan detection, missing prompts
+- **Execution Engine**:Linear, conditional, and goal-gated pipelines; status fields, terminal stopping, branch selection
+- **Goal Gate**:Goal gate enforcement and failure handling
+- **Node Handlers**:Handler type registry with required types
+- **Retry Logic**:Max retries enforcement
+- **State/Context**:Execution context and trace
+- **Condition Expressions**:Parsed condition attributes
 
 ## Harbor Registry
 
@@ -290,9 +286,9 @@ harbor run --path ./tasks --agent claude-code --model anthropic/claude-opus-4-6
 
 ## Reproducibility and Eval Contamination
 
-The mock LLM server returns deterministic canned responses. Two runs of the same agent should produce near-identical conformance scores — any variance comes from agent non-determinism (temperature, tool-use ordering).
+The mock LLM server returns deterministic canned responses. Two runs of the same agent should produce near-identical conformance scores:any variance comes from agent non-determinism (temperature, tool-use ordering).
 
-**On contamination:** The NLSpec source files (`specs/`) are intentionally public — the benchmark measures whether an agent can follow a real spec, and having seen the spec in training is analogous to a developer reading the design doc before starting. The conformance tests, mock server, and scoring harness are generated locally (not checked into the repo) so they stay out of training data. For leaderboard evaluations, the generator in `adapter.py` makes it straightforward to produce fresh conformance variants with different mock responses or test subsets.
+**On contamination:** The NLSpec source files (`specs/`) are intentionally public:the benchmark measures whether an agent can follow a real spec, and having seen the spec in training is analogous to a developer reading the design doc before starting. The conformance tests, mock server, and scoring harness are generated locally (not checked into the repo) so they stay out of training data. For leaderboard evaluations, the generator in `adapter.py` makes it straightforward to produce fresh conformance variants with different mock responses or test subsets.
 
 For published results, we recommend:
 
@@ -304,12 +300,9 @@ For published results, we recommend:
 
 ## Run Artifact Policy
 
-- Commit high-level benchmark outputs only:
-  - `LEADERBOARD.md`
-  - `RUN_LOG.md`
+- Commit `LEADERBOARD.md` and `RUN_LOG.md` only. See [docs/runbook/leaderboard.md](docs/runbook/leaderboard.md) for the curation process.
 - Do not commit raw Harbor run artifacts under `jobs/` (agent transcripts, tool logs, verifier logs, trial outputs, etc.).
 - The repository keeps `jobs/.gitkeep` so the directory exists locally, while run contents remain ignored.
-- `RUN_LOG.md` should now include benchmark version + effort setting for each run (e.g., OpenAI `reasoning_effort`).
 
 ## Development
 

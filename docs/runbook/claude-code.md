@@ -33,4 +33,4 @@ make run-opus V=1      # anthropic/claude-opus-4-6
 
 - Sonnet 4.6 is faster and cheaper than Opus with comparable or better scores on this benchmark.
 - Claude Code produces ATIF trajectories, enabling full cache-aware cost breakdowns.
-- No special patches or workarounds needed — works out of the box with Harbor.
+- Works out of the box with Harbor. No special patches or workarounds needed.

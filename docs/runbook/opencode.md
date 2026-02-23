@@ -32,8 +32,8 @@ make run-gemini31ct-opencode V=1    # google/gemini-3.1-pro-preview-customtools
 
 ## Known Issues
 
-- **Missing API keys** — If the correct env var isn't set, OpenCode runs complete in ~7 seconds with 0.000 score and no tokens. This looks like a successful but empty run. Double-check that the appropriate API key is exported.
-- **Key naming** — Google models need `GOOGLE_GENERATIVE_AI_API_KEY` (not `GEMINI_API_KEY`).
+- **Missing API keys**: If the correct env var isn't set, OpenCode runs complete in ~7 seconds with 0.000 score and no tokens. This looks like a successful but empty run. Double-check that the appropriate API key is exported.
+- **Key naming**: Google models need `GOOGLE_GENERATIVE_AI_API_KEY` (the `GEMINI_API_KEY` var is ignored).
 
 ## Tips
 
