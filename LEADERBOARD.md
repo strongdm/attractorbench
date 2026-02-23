@@ -5,6 +5,7 @@ Agent+model rankings across benchmark runs. Score is the composite (5% build + 5
 | Agent | Model | Label | Tasks | Score | T1 | T2 | T3 | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |
 |-------|-------|-------|------:|------:|---:|---:|---:|-------:|-----:|-----------:|-----:|-------:|-----:|
 | claude-code | claude-sonnet-4-6 |  | 2 | 0.729 | 67.9% | 68.4% | 0.0% | 26.3M | 39m34s | 172 | $11.14 | 36.0M | $15.28 |
+| codex | gpt-5.2 |  | 2 | 0.701 | 82.1% | 68.4% | 0.0% | 5.1M | 18m21s | 83 | $9.77 | 7.2M | $13.94 |
 | claude-code | claude-opus-4-6 |  | 2 | 0.680 | 25.0% | 68.4% | 0.0% | 16.6M | 33m05s | 93 | $15.05 | 24.4M | $22.13 |
 | gemini-cli | gemini-3.1-pro-preview |  | 2 | 0.559 | 28.6% | 68.4% | 0.0% | 181K | 9m34s | 53 | $0.41 | 325K | $0.74 |
 | gemini-cli | gemini-2.5-pro |  | 2 | 0.550 | 17.9% | 15.8% | 0.0% | 22.5M | 35m12s | 168 | $29.74 | 40.9M | $54.03 |

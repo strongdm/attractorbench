@@ -11,5 +11,6 @@ Per-job benchmark run history with scores, token usage, and cost.
 | gemini31-stacked | gemini-cli | gemini-3.1-pro-preview | 2 | 0.450 | 91K | 1m35s | 7 | $0.23 | 2026-02-22 |
 | gemini31-stacked-v2 | gemini-cli | gemini-3.1-pro-preview | 2 | 0.383 | 58K | 1m22s | 6 | $0.15 | 2026-02-22 |
 | gemini31-stacked-v3 | gemini-cli | gemini-3.1-pro-preview | 2 | 0.559 | 181K | 9m34s | 53 | $0.41 | 2026-02-22 |
+| gpt52-codex-stacked-v1 | codex | gpt-5.2 | 2 | 0.701 | 5.1M | 18m21s | 83 | $9.77 | 2026-02-23 |
 | opus46-stacked-v1 | claude-code | claude-opus-4-6 | 2 | 0.680 | 16.6M | 33m05s | 93 | $15.05 | 2026-02-23 |
 | sonnet46-stacked-v1 | claude-code | claude-sonnet-4-6 | 2 | 0.729 | 26.3M | 39m34s | 172 | $11.14 | 2026-02-23 |
