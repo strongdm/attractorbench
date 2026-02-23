@@ -24,9 +24,9 @@ Key properties:
 | Tier | Name | Spec Lines | Conformance Tests | DoD Items | Coverage | Agent Timeout | Difficulty |
 |------|------|-----------|-------------------|-----------|----------|---------------|------------|
 | 0 | Smoke Test | ~30 | 7 | 6 | 100% | 5 min | Easy |
-| 1 | Unified LLM SDK | ~2,150 | 35 | 78 | 36% | 2 hours | Hard |
-| 2 | Coding Agent Loop | ~1,450 | 20 | 71 | 28% | 2 hours | Hard |
-| 3 | Attractor Pipeline | ~2,080 | 28 | 89 | 31% | 2 hours | Hard |
+| 1 | Unified LLM SDK | ~2,150 | 35 | 115 | 30% | 2 hours | Hard |
+| 2 | Coding Agent Loop | ~1,450 | 20 | 104 | 19% | 2 hours | Hard |
+| 3 | Attractor Pipeline | ~2,080 | 28 | 98 | 29% | 2 hours | Hard |
 
 **Tier 0** validates plumbing — your Harbor integration, the mock server, and the scoring pipeline all work before you spend 30 minutes on a real run.
 
@@ -311,57 +311,14 @@ For published results, we recommend:
 - The repository keeps `jobs/.gitkeep` so the directory exists locally, while run contents remain ignored.
 - `RUN_LOG.md` should now include benchmark version + effort setting for each run (e.g., OpenAI `reasoning_effort`).
 
-## CLI Reference
-
-```bash
-# Generate Harbor task directories
-uv run attractorbench generate --output-dir tasks
-uv run attractorbench generate --output-dir tasks --curriculum
-
-# Score a completed job
-uv run attractorbench score jobs/<job-name>
-
-# Compare multiple jobs (per-task detail)
-uv run attractorbench compare jobs/run-a jobs/run-b jobs/run-c
-
-# Leaderboard — rank agent+model combos with efficiency metrics
-# (Ad hoc analysis only; does not auto-update LEADERBOARD.md)
-uv run attractorbench leaderboard jobs/run-a jobs/run-b jobs/run-c
-uv run attractorbench leaderboard jobs/* --sort cost      # sort by cost (ascending)
-uv run attractorbench leaderboard jobs/* --sort tokens    # sort by token usage
-uv run attractorbench leaderboard jobs/* --sort time      # sort by wall time
-uv run attractorbench leaderboard jobs/* --sort efficiency # sort by tokens/point
-uv run attractorbench leaderboard jobs/* --include-curriculum
-uv run attractorbench leaderboard jobs/* --markdown       # markdown table output
-uv run attractorbench leaderboard jobs/* --json           # JSON output
-
-# Historical run ledger
-uv run attractorbench run-log jobs/run-a jobs/run-b jobs/run-c
-
-# View DoD checklists
-uv run attractorbench checklist           # all tiers
-uv run attractorbench checklist --tier 1  # just Tier 1
-```
-
 ## Development
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management. All commands are run via `uv run` which automatically uses the project's virtual environment.
 
 ```bash
-# Install dependencies (creates .venv/ automatically)
-uv sync
-
-# Run tests
-uv run pytest tests/ -v
-
-# Add a dependency
-uv add <package>         # runtime
-uv add --dev <package>   # dev only
-
-# Generate and inspect tasks
-uv run attractorbench generate --output-dir tasks
-uv run attractorbench generate --output-dir tasks --curriculum
-ls tasks/full-stack/
+uv add <package>         # add a runtime dependency
+uv add --dev <package>   # add a dev dependency
+uv run pytest tests/ -v  # run tests
 ```
 
 ## License
