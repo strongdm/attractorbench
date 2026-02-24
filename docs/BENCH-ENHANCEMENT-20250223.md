@@ -107,7 +107,7 @@ Likely changes:
 
 - `src/attractorbench/adapter.py`
   - `generate_instruction()`
-  - `generate_stacked_instruction()`
+  - `generate_fullstack_instruction()`
 
 No scoring changes required.
 
@@ -174,7 +174,7 @@ Likely changes:
 
 - `src/attractorbench/adapter.py`
   - `generate_run_conformance()` (add `--suite`, implement filtering)
-  - `generate_test_sh()` + `generate_stacked_test_sh()` (pass `--suite full`)
+  - `generate_test_sh()` + `generate_fullstack_test_sh()` (pass `--suite full`)
 
 Backward compatibility:
 

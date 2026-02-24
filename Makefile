@@ -35,38 +35,38 @@ test:
 
 run-sonnet: generate
 	harbor run --path ./tasks --agent claude-code --model anthropic/claude-sonnet-4-6 \
-		--env docker --job-name sonnet46-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/sonnet46-stacked-v$(V)
+		--env docker --job-name sonnet46-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/sonnet46-v$(V)
 	$(MAKE) results
 
 run-opus: generate
 	harbor run --path ./tasks --agent claude-code --model anthropic/claude-opus-4-6 \
-		--env docker --job-name opus46-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/opus46-stacked-v$(V)
+		--env docker --job-name opus46-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/opus46-v$(V)
 	$(MAKE) results
 
 run-gpt52: generate
 	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
-		--env docker --job-name gpt52-codex-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/gpt52-codex-stacked-v$(V)
+		--env docker --job-name gpt52-codex-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gpt52-codex-v$(V)
 	$(MAKE) results
 
 run-gemini31: generate
 	harbor run --path ./tasks --agent gemini-cli --model google/gemini-3.1-pro-preview \
-		--env docker --job-name gemini31-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/gemini31-stacked-v$(V)
+		--env docker --job-name gemini31-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gemini31-v$(V)
 	$(MAKE) results
 
 run-gemini31ct: generate
 	harbor run --path ./tasks --agent gemini-cli --model google/gemini-3.1-pro-preview-customtools \
-		--env docker --job-name gemini31ct-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/gemini31ct-stacked-v$(V)
+		--env docker --job-name gemini31ct-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gemini31ct-v$(V)
 	$(MAKE) results
 
 run-gemini25pro: generate
 	harbor run --path ./tasks --agent gemini-cli --model google/gemini-2.5-pro \
-		--env docker --job-name gemini25pro-stacked-v$(V) $(EXTRA_ARGS)
-	uv run attractorbench score jobs/gemini25pro-stacked-v$(V)
+		--env docker --job-name gemini25pro-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gemini25pro-v$(V)
 	$(MAKE) results
 
 run-gemini31ct-opencode: generate

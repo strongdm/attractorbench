@@ -189,13 +189,13 @@ TIER_DEFS: list[TierDef] = [
 ]
 
 
-STACKED_SLUG = "full-stack"
-STACKED_AGENT_TIMEOUT = 14400  # 4 hours
-STACKED_VERIFIER_TIMEOUT = 900  # 15 minutes
+FULLSTACK_SLUG = "full-stack"
+FULLSTACK_AGENT_TIMEOUT = 14400  # 4 hours
+FULLSTACK_VERIFIER_TIMEOUT = 900  # 15 minutes
 
 
 @dataclass
-class StackedTierDef:
+class FullStackTierDef:
     """Combined task definition for tiers 1-3 in a single workspace."""
 
     name: str  # "Full Stack"
@@ -205,15 +205,15 @@ class StackedTierDef:
     verifier_timeout: int  # 900
 
 
-def load_stacked_tier() -> StackedTierDef:
-    """Load tiers 1, 2, 3 and bundle them into a single stacked task."""
+def load_fullstack_tier() -> FullStackTierDef:
+    """Load tiers 1, 2, 3 and bundle them into a single full-stack task."""
     tiers = load_tiers([1, 2, 3])
-    return StackedTierDef(
+    return FullStackTierDef(
         name="Full Stack",
-        slug=STACKED_SLUG,
+        slug=FULLSTACK_SLUG,
         tiers=tiers,
-        agent_timeout=STACKED_AGENT_TIMEOUT,
-        verifier_timeout=STACKED_VERIFIER_TIMEOUT,
+        agent_timeout=FULLSTACK_AGENT_TIMEOUT,
+        verifier_timeout=FULLSTACK_VERIFIER_TIMEOUT,
     )
 
 

@@ -9,11 +9,11 @@ from attractorbench.adapter import (
     generate_mock_server,
     generate_run_conformance,
     generate_score_py,
-    generate_stacked_test_sh,
+    generate_fullstack_test_sh,
     generate_task_toml,
     generate_test_sh,
 )
-from attractorbench.tiers import load_stacked_tier
+from attractorbench.tiers import load_fullstack_tier
 from attractorbench.tiers import TierDef
 
 
@@ -228,9 +228,9 @@ class AdapterGenerationTests(unittest.TestCase):
         # Harbor uploads tests at verify time - no COPY needed
         self.assertNotIn("COPY tests/", dockerfile)
 
-    def test_stacked_test_sh_uses_full_suite(self) -> None:
-        stacked = load_stacked_tier()
-        script = generate_stacked_test_sh(stacked)
+    def test_fullstack_test_sh_uses_full_suite(self) -> None:
+        fullstack = load_fullstack_tier()
+        script = generate_fullstack_test_sh(fullstack)
         self.assertIn("--tier 1", script)
         self.assertIn("--suite full", script)
 
