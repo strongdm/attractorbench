@@ -2325,7 +2325,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("errors", []))
+            diags_list = diags.get("diagnostics") or diags.get("errors") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
@@ -2350,7 +2350,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("warnings", []))
+            diags_list = diags.get("diagnostics") or diags.get("warnings") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
@@ -2375,7 +2375,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("errors", []))
+            diags_list = diags.get("diagnostics") or diags.get("errors") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
@@ -2573,7 +2573,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("errors", diags.get("warnings", [])))
+            diags_list = diags.get("diagnostics") or diags.get("errors") or diags.get("warnings") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
@@ -2600,7 +2600,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("errors", diags.get("warnings", [])))
+            diags_list = diags.get("diagnostics") or diags.get("errors") or diags.get("warnings") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
@@ -2642,7 +2642,7 @@ def tier3_tests():
     try:
         diags = json.loads(out)
         if isinstance(diags, dict):
-            diags_list = diags.get("diagnostics", diags.get("errors", diags.get("warnings", [])))
+            diags_list = diags.get("diagnostics") or diags.get("errors") or diags.get("warnings") or []
         elif isinstance(diags, list):
             diags_list = diags
         else:
