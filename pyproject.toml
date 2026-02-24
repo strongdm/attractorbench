@@ -1,6 +1,6 @@
 [project]
 name = "attractorbench"
-version = "1.0.0"
+version = "2.0.0"
 description = "Benchmark for measuring coding agent compliance with the Attractor NLSpec suite"
 requires-python = ">=3.11"
 dependencies = [

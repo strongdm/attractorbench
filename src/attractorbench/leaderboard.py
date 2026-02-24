@@ -373,6 +373,9 @@ def build_leaderboard(job_dirs: list[Path], *, include_curriculum: bool = False)
         tier2_rates = [r.tier2_conformance.pass_rate for r in rewards if r.tier2_conformance is not None]
         tier3_rates = [r.tier3_conformance.pass_rate for r in rewards if r.tier3_conformance is not None]
 
+        # Extract LLM judge scores (average across tasks that have them)
+        judge_scores = [r.llm_judge_score for r in rewards if r.llm_judge_score is not None]
+
         entries.append(
             LeaderboardEntry(
                 agent=agent,
@@ -386,6 +389,7 @@ def build_leaderboard(job_dirs: list[Path], *, include_curriculum: bool = False)
                 tier1_conformance=sum(tier1_rates) / len(tier1_rates) if tier1_rates else None,
                 tier2_conformance=sum(tier2_rates) / len(tier2_rates) if tier2_rates else None,
                 tier3_conformance=sum(tier3_rates) / len(tier3_rates) if tier3_rates else None,
+                llm_judge_score=sum(judge_scores) / len(judge_scores) if judge_scores else None,
                 total_tokens=total_tokens,
                 wall_seconds=wall_seconds,
                 tool_calls=tool_calls,
@@ -431,6 +435,7 @@ def _fmt_tier(rate: float | None) -> str:
 def render_table(leaderboard: Leaderboard, console: Console) -> None:
     """Render the leaderboard as a Rich table."""
     has_tiers = any(e.tier1_conformance is not None for e in leaderboard.entries)
+    has_judge = any(e.llm_judge_score is not None for e in leaderboard.entries)
 
     table = Table(title="Leaderboard")
     table.add_column("Agent", style="bold")
@@ -442,6 +447,8 @@ def render_table(leaderboard: Leaderboard, console: Console) -> None:
         table.add_column("T1", justify="right")
         table.add_column("T2", justify="right")
         table.add_column("T3", justify="right")
+    if has_judge:
+        table.add_column("Judge", justify="right")
     table.add_column("Tokens", justify="right")
     table.add_column("Time", justify="right")
     table.add_column("Tool Calls", justify="right")
@@ -463,6 +470,8 @@ def render_table(leaderboard: Leaderboard, console: Console) -> None:
                 _fmt_tier(e.tier2_conformance),
                 _fmt_tier(e.tier3_conformance),
             ])
+        if has_judge:
+            row.append(_fmt_tier(e.llm_judge_score))
         row.extend([
             fmt_tokens(e.total_tokens),
             fmt_time(e.wall_seconds),
@@ -479,19 +488,29 @@ def render_table(leaderboard: Leaderboard, console: Console) -> None:
 def render_markdown(leaderboard: Leaderboard) -> str:
     """Render the leaderboard as a markdown table string."""
     has_tiers = any(e.tier1_conformance is not None for e in leaderboard.entries)
+    has_judge = any(e.llm_judge_score is not None for e in leaderboard.entries)
 
+    # Build header dynamically
+    cols = ["Agent", "Model", "Label", "Tasks", "Score"]
     if has_tiers:
-        header = "| Agent | Model | Label | Tasks | Score | T1 | T2 | T3 | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |"
-        sep = "|-------|-------|-------|------:|------:|---:|---:|---:|-------:|-----:|-----------:|-----:|-------:|-----:|"
+        cols.extend(["T1", "T2", "T3"])
+    if has_judge:
+        cols.append("Judge")
+    cols.extend(["Tokens", "Time", "Tool Calls", "Cost", "Tok/Pt", "$/Pt"])
+
+    header = "| " + " | ".join(cols) + " |"
+    sep = "|" + "|".join("------:" if c in ("Tasks", "Score", "T1", "T2", "T3", "Judge", "Tokens", "Time", "Tool Calls", "Cost", "Tok/Pt", "$/Pt") else "-------" for c in cols) + "|"
+
+    if has_judge:
+        formula_desc = "(5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge)"
     else:
-        header = "| Agent | Model | Label | Tasks | Score | Tokens | Time | Tool Calls | Cost | Tok/Pt | $/Pt |"
-        sep = "|-------|-------|-------|------:|------:|-------:|-----:|-----------:|-----:|-------:|-----:|"
+        formula_desc = "(5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3)"
 
     lines = [
         "# AttractorBench Leaderboard",
         "",
-        "Agent+model rankings across benchmark runs. Score is the composite "
-        "(5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3).",
+        f"Agent+model rankings across benchmark runs. Score is the composite "
+        f"{formula_desc}.",
         "",
         header,
         sep,
@@ -505,10 +524,14 @@ def render_markdown(leaderboard: Leaderboard) -> str:
                 f"| {_fmt_tier(e.tier2_conformance)} "
                 f"| {_fmt_tier(e.tier3_conformance)} "
             )
+        judge_col = ""
+        if has_judge:
+            judge_col = f"| {_fmt_tier(e.llm_judge_score)} "
         lines.append(
             f"| {e.agent} | {e.model} | {e.label} "
             f"| {e.tasks_attempted} | {e.avg_composite:.3f} "
             f"{tier_cols}"
+            f"{judge_col}"
             f"| {fmt_tokens(e.total_tokens)} | {fmt_time(e.wall_seconds)} "
             f"| {tool_calls_str} | {fmt_cost(e.cost_usd)} "
             f"| {fmt_ratio(e.tokens_per_point, 'tokens')} "

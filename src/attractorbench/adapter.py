@@ -3682,50 +3682,31 @@ python3 /tests/conformance/run_conformance.py --tier 2 \
 CONF2_EXIT=$?
 echo "Tier 2 conformance exit code: $CONF2_EXIT" | tee -a /logs/verifier/conformance_tier2.log
 
-# Gate: Layer 3 is only meaningful if Layer 2's core loop works.
-# If Tier 2 can't run a basic process-input session, skip Tier 3 entirely.
-T2_CAN_ADVANCE=0
-if [ -f /logs/verifier/conformance_results_tier2.json ]; then
-  T2_CAN_ADVANCE=$(python3 - <<'PY'
-import json
-from pathlib import Path
+# Phase 3c: Tier 3 conformance
+echo "=== Phase 3c: Tier 3 Conformance ===" | tee /logs/verifier/conformance_tier3.log
+curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
+python3 /tests/conformance/run_conformance.py --tier 3 \
+  --suite full \
+  --output /logs/verifier/conformance_results_tier3.json >> /logs/verifier/conformance_tier3.log 2>&1
+CONF3_EXIT=$?
+echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conformance_tier3.log
 
-p = Path("/logs/verifier/conformance_results_tier2.json")
-try:
-    data = json.loads(p.read_text())
-except Exception:
-    print("0")
-    raise SystemExit(0)
-
-tests = data.get("tests", [])
-passed_by_name = {
-    t.get("name"): bool(t.get("passed"))
-    for t in tests
-    if isinstance(t, dict) and isinstance(t.get("name"), str)
-}
-print("1" if passed_by_name.get("process_input") else "0")
-PY
-  )
-fi
-
-if [ "${T2_CAN_ADVANCE}" != "1" ]; then
-  echo "=== Phase 3c: Tier 3 Conformance (SKIPPED) ===" | tee /logs/verifier/conformance_tier3.log
-  echo "Skipping Tier 3: Tier 2 did not pass core loop (process_input)." | tee -a /logs/verifier/conformance_tier3.log
-  cat > /logs/verifier/conformance_results_tier3.json <<'JSON'
-{"tier":3,"tests":[],"sections":{},"total":0,"passed":0,"skipped_due_to_tier2":true}
-JSON
-else
-  # Phase 3c: Tier 3 conformance
-  echo "=== Phase 3c: Tier 3 Conformance ===" | tee /logs/verifier/conformance_tier3.log
-  curl -fsS http://localhost:9999/requests/reset >/dev/null 2>&1 || true
-  python3 /tests/conformance/run_conformance.py --tier 3 \
-    --suite full \
-    --output /logs/verifier/conformance_results_tier3.json >> /logs/verifier/conformance_tier3.log 2>&1
-  CONF3_EXIT=$?
-  echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conformance_tier3.log
-fi
+# Phase 4: LLM Judge (non-fatal)
+echo "=== Phase 4: LLM Judge ===" | tee /logs/verifier/llm_judge.log
+JUDGE_MODEL="${ATTRACTORBENCH_JUDGE_MODEL:-gpt-4o}"
+JUDGE_BASE_URL="${ATTRACTORBENCH_JUDGE_BASE_URL:-http://litellm:4000/v1}"
+python3 /tests/llm_judge.py \
+  --specs-dir /workspace/specs --workspace-dir /workspace \
+  --conformance-dir /logs/verifier \
+  --output /logs/verifier/llm_judge_results.json \
+  --judge-model "$JUDGE_MODEL" --judge-base-url "$JUDGE_BASE_URL" \
+  >> /logs/verifier/llm_judge.log 2>&1 || echo "Warning: LLM Judge failed (non-fatal)"
 
 # Aggregate into reward.json
+LLM_JUDGE_FLAG=""
+if [ -f /logs/verifier/llm_judge_results.json ]; then
+  LLM_JUDGE_FLAG="--llm-judge /logs/verifier/llm_judge_results.json"
+fi
 python3 /tests/score.py \
   --build-exit $BUILD_EXIT \
   --selftest-exit $SELFTEST_EXIT \
@@ -3733,13 +3714,347 @@ python3 /tests/score.py \
   --conformance-tier1 /logs/verifier/conformance_results_tier1.json \
   --conformance-tier2 /logs/verifier/conformance_results_tier2.json \
   --conformance-tier3 /logs/verifier/conformance_results_tier3.json \
-  --output /logs/verifier/reward.json
+  --output /logs/verifier/reward.json \
+  $LLM_JUDGE_FLAG
 
 echo "=== Done ==="
 cat /logs/verifier/reward.json
 
 exit 0
 """
+
+
+def generate_llm_judge_py() -> str:
+    """Generate the in-container LLM-as-judge evaluation script."""
+    return '''#!/usr/bin/env python3
+"""LLM-as-judge evaluation for attractorbench full-stack task.
+
+Evaluates the agent's implementation across 5 dimensions using an LLM judge.
+Uses urllib.request (stdlib only) to call an OpenAI-compatible API.
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+
+DIMENSIONS = {
+    "spec_coverage": {
+        "description": "Are all major spec sections addressed, or are entire areas unimplemented?",
+        "rubric": """Score 0.0: Most spec sections are unimplemented. Only trivial stubs or boilerplate exist.
+Score 0.5: Some spec sections are implemented but significant areas are missing or stubbed out.
+Score 1.0: All major spec sections have substantive implementations. Minor gaps are acceptable.""",
+    },
+    "architectural_compliance": {
+        "description": "Does the implementation follow the specified layering? T2 uses T1's client, T3 uses T2's backend, correct separation of concerns.",
+        "rubric": """Score 0.0: No evidence of proper layering. Components are monolithic or completely disconnected.
+Score 0.5: Some layering exists but with violations. E.g., T3 bypasses T2 and calls T1 directly, or significant coupling issues.
+Score 1.0: Clean layering as specified. Each tier properly builds on the one below it. Clear separation of concerns.""",
+    },
+    "error_handling": {
+        "description": "Does the implementation handle errors gracefully with meaningful messages? Retry/backoff where appropriate?",
+        "rubric": """Score 0.0: No error handling. Exceptions propagate unhandled. No meaningful error messages.
+Score 0.5: Basic error handling exists (try/catch) but messages are generic or important failure modes are unhandled.
+Score 1.0: Comprehensive error handling with meaningful messages. Appropriate retry/backoff for network operations. Edge cases covered.""",
+    },
+    "test_quality": {
+        "description": "Are the agent's own tests meaningful, or are they trivial stubs that always pass?",
+        "rubric": """Score 0.0: No tests, or only trivial stubs (e.g., assert True, empty test functions).
+Score 0.5: Some real tests exist but coverage is thin. Tests may only cover happy paths or use mocks excessively.
+Score 1.0: Meaningful test suite with good coverage. Tests verify actual behavior, include edge cases, and would catch real bugs.""",
+    },
+    "code_quality": {
+        "description": "Is the code idiomatic, well-structured, and free of obvious anti-patterns?",
+        "rubric": """Score 0.0: Code is poorly structured, hard to read, with obvious anti-patterns (god functions, copy-paste duplication, magic numbers everywhere).
+Score 0.5: Code is functional but has notable style issues, some duplication, or inconsistent patterns.
+Score 1.0: Clean, idiomatic code. Well-named functions/variables, appropriate abstractions, consistent style throughout.""",
+    },
+}
+
+SYSTEM_PROMPT = "You are evaluating a software implementation against a specification. Be objective and precise. Always respond with valid JSON."
+
+MAX_SOURCE_CHARS = 12000
+MAX_SPEC_CHARS = 8000
+CALLS_PER_DIMENSION = 3
+PER_CALL_TIMEOUT = 60
+GLOBAL_BUDGET = 300
+
+
+def collect_source_files(workspace_dir: str) -> str:
+    """Collect representative source code from the workspace."""
+    ws = Path(workspace_dir)
+    source_extensions = {".py", ".js", ".ts", ".go", ".rs", ".java", ".rb", ".sh"}
+    exclude_dirs = {"node_modules", ".git", "__pycache__", "venv", ".venv", "vendor", "dist", "build"}
+
+    files = []
+    for ext in sorted(source_extensions):
+        for f in sorted(ws.rglob(f"*{ext}")):
+            if any(ex in f.parts for ex in exclude_dirs):
+                continue
+            if f.is_file():
+                files.append(f)
+
+    content_parts = []
+    total_chars = 0
+    for f in files:
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        rel = str(f.relative_to(ws))
+        header = f"\\n--- {rel} ---\\n"
+        chunk = header + text
+        if total_chars + len(chunk) > MAX_SOURCE_CHARS:
+            remaining = MAX_SOURCE_CHARS - total_chars
+            if remaining > 200:
+                content_parts.append(header + text[:remaining - len(header)] + "\\n[truncated]")
+            break
+        content_parts.append(chunk)
+        total_chars += len(chunk)
+
+    return "".join(content_parts)
+
+
+def collect_test_files(workspace_dir: str) -> str:
+    """Collect test files from the workspace."""
+    ws = Path(workspace_dir)
+    test_patterns = ["test_*.py", "*_test.py", "*_test.go", "*.test.js", "*.test.ts", "*.spec.js", "*.spec.ts"]
+    exclude_dirs = {"node_modules", ".git", "__pycache__", "venv", ".venv"}
+
+    files = []
+    for pattern in test_patterns:
+        for f in sorted(ws.rglob(pattern)):
+            if any(ex in f.parts for ex in exclude_dirs):
+                continue
+            if f.is_file():
+                files.append(f)
+
+    content_parts = []
+    total_chars = 0
+    for f in files:
+        try:
+            text = f.read_text(errors="replace")
+        except OSError:
+            continue
+        rel = str(f.relative_to(ws))
+        header = f"\\n--- {rel} ---\\n"
+        chunk = header + text
+        if total_chars + len(chunk) > MAX_SOURCE_CHARS:
+            remaining = MAX_SOURCE_CHARS - total_chars
+            if remaining > 200:
+                content_parts.append(header + text[:remaining - len(header)] + "\\n[truncated]")
+            break
+        content_parts.append(chunk)
+        total_chars += len(chunk)
+
+    return "".join(content_parts)
+
+
+def collect_specs(specs_dir: str) -> str:
+    """Collect spec files, truncated to budget."""
+    sd = Path(specs_dir)
+    if not sd.exists():
+        return "[No specs directory found]"
+
+    content_parts = []
+    total_chars = 0
+    for f in sorted(sd.iterdir()):
+        if f.is_file() and f.suffix in (".md", ".txt"):
+            try:
+                text = f.read_text(errors="replace")
+            except OSError:
+                continue
+            header = f"\\n--- {f.name} ---\\n"
+            chunk = header + text
+            if total_chars + len(chunk) > MAX_SPEC_CHARS:
+                remaining = MAX_SPEC_CHARS - total_chars
+                if remaining > 200:
+                    content_parts.append(header + text[:remaining - len(header)] + "\\n[truncated]")
+                break
+            content_parts.append(chunk)
+            total_chars += len(chunk)
+
+    return "".join(content_parts) if content_parts else "[No spec files found]"
+
+
+def collect_conformance_summary(conformance_dir: str) -> str:
+    """Summarize conformance results."""
+    cd = Path(conformance_dir)
+    parts = []
+    for tier in (1, 2, 3):
+        f = cd / f"conformance_results_tier{tier}.json"
+        if f.exists():
+            try:
+                data = json.loads(f.read_text())
+                total = data.get("total", len(data.get("tests", [])))
+                passed = data.get("passed", sum(1 for t in data.get("tests", []) if t.get("passed")))
+                parts.append(f"Tier {tier}: {passed}/{total} tests passed")
+                # Include failed test names
+                failed = [t.get("name", "?") for t in data.get("tests", []) if not t.get("passed")]
+                if failed:
+                    parts.append(f"  Failed: {', '.join(failed[:10])}")
+            except (json.JSONDecodeError, OSError):
+                parts.append(f"Tier {tier}: [results unreadable]")
+        else:
+            parts.append(f"Tier {tier}: [no results]")
+    return "\\n".join(parts)
+
+
+def call_judge(base_url: str, model: str, dimension: str, dim_info: dict,
+               source_code: str, spec_text: str, conformance_summary: str,
+               test_code: str) -> dict:
+    """Make a single judge API call for one dimension."""
+
+    # Choose context based on dimension
+    if dimension == "test_quality":
+        code_context = test_code if test_code.strip() else source_code
+    else:
+        code_context = source_code
+
+    user_prompt = f"""Evaluate this software implementation for: {dim_info['description']}
+
+## Specification Excerpts
+{spec_text}
+
+## Conformance Test Results
+{conformance_summary}
+
+## Source Code
+{code_context}
+
+## Scoring Rubric
+{dim_info['rubric']}
+
+Respond with a JSON object containing exactly two keys:
+- "reasoning": a 2-3 sentence explanation of your score
+- "score": one of 0, 0.5, or 1.0
+
+Example: {{"reasoning": "The implementation covers most spec sections...", "score": 0.5}}"""
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": 0.0,
+        "max_tokens": 500,
+        "response_format": {"type": "json_object"},
+    }
+
+    url = base_url.rstrip("/") + "/chat/completions"
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=PER_CALL_TIMEOUT) as resp:
+        result = json.loads(resp.read().decode("utf-8"))
+
+    content = result["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
+    score = float(parsed["score"])
+    # Clamp to valid values
+    if score not in (0.0, 0.5, 1.0):
+        score = max(0.0, min(1.0, round(score * 2) / 2))
+    return {"score": score, "reasoning": parsed.get("reasoning", "")}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="LLM-as-judge evaluation")
+    parser.add_argument("--specs-dir", required=True)
+    parser.add_argument("--workspace-dir", required=True)
+    parser.add_argument("--conformance-dir", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--judge-model", default="gpt-4o")
+    parser.add_argument("--judge-base-url", default="http://litellm:4000/v1")
+    args = parser.parse_args()
+
+    print(f"LLM Judge starting: model={args.judge_model}, base_url={args.judge_base_url}", file=sys.stderr)
+
+    # Collect context
+    source_code = collect_source_files(args.workspace_dir)
+    test_code = collect_test_files(args.workspace_dir)
+    spec_text = collect_specs(args.specs_dir)
+    conformance_summary = collect_conformance_summary(args.conformance_dir)
+
+    if not source_code.strip():
+        print("Warning: No source files found in workspace", file=sys.stderr)
+
+    results = {"judge_model": args.judge_model, "dimensions": {}}
+    global_start = time.time()
+
+    for dim_name, dim_info in DIMENSIONS.items():
+        scores = []
+        reasoning_samples = []
+
+        for call_idx in range(CALLS_PER_DIMENSION):
+            if time.time() - global_start > GLOBAL_BUDGET:
+                print(f"Global budget exceeded, stopping at {dim_name} call {call_idx}", file=sys.stderr)
+                break
+
+            try:
+                result = call_judge(
+                    args.judge_base_url, args.judge_model,
+                    dim_name, dim_info,
+                    source_code, spec_text, conformance_summary, test_code,
+                )
+                scores.append(result["score"])
+                reasoning_samples.append(result["reasoning"])
+                print(f"  {dim_name}[{call_idx}]: score={result['score']}", file=sys.stderr)
+            except Exception as e:
+                print(f"  {dim_name}[{call_idx}]: FAILED - {e}", file=sys.stderr)
+
+        if scores:
+            mean = sum(scores) / len(scores)
+            if len(scores) > 1:
+                variance = sum((s - mean) ** 2 for s in scores) / len(scores)
+                stddev = variance ** 0.5
+            else:
+                stddev = 0.0
+        else:
+            mean = 0.0
+            stddev = 0.0
+
+        results["dimensions"][dim_name] = {
+            "scores": scores,
+            "mean": round(mean, 3),
+            "stddev": round(stddev, 3),
+            "reasoning_samples": reasoning_samples,
+        }
+
+        if time.time() - global_start > GLOBAL_BUDGET:
+            print("Global budget exceeded, stopping evaluation", file=sys.stderr)
+            break
+
+    # Compute composite
+    dim_means = [d["mean"] for d in results["dimensions"].values()]
+    if dim_means:
+        composite = sum(dim_means) / len(dim_means)
+        dim_stddevs = [d["stddev"] for d in results["dimensions"].values()]
+        composite_stddev = (sum(s ** 2 for s in dim_stddevs) / len(dim_stddevs)) ** 0.5
+    else:
+        composite = 0.0
+        composite_stddev = 0.0
+
+    results["composite_judge_score"] = round(composite, 3)
+    results["composite_judge_stddev"] = round(composite_stddev, 3)
+
+    Path(args.output).write_text(json.dumps(results, indent=2))
+    print(f"LLM Judge complete: composite={composite:.3f} (stddev={composite_stddev:.3f})", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()
+'''
 
 
 def generate_fullstack_score_py() -> str:
@@ -3826,6 +4141,20 @@ def load_conformance(path: str) -> tuple[int, int, float]:
     return total, passed, rate
 
 
+def load_judge_results(path: str) -> dict:
+    """Load LLM judge results if available."""
+    judge_path = Path(path)
+    if not judge_path.exists():
+        return {}
+    try:
+        data = json.loads(judge_path.read_text())
+        if not isinstance(data, dict):
+            return {}
+        return data
+    except (json.JSONDecodeError, ValueError):
+        return {}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--build-exit", type=int, required=True)
@@ -3834,6 +4163,7 @@ def main():
     parser.add_argument("--conformance-tier1", type=str, required=True)
     parser.add_argument("--conformance-tier2", type=str, required=True)
     parser.add_argument("--conformance-tier3", type=str, required=True)
+    parser.add_argument("--llm-judge", type=str, default="")
     parser.add_argument("--output", type=str, required=True)
     args = parser.parse_args()
 
@@ -3871,14 +4201,37 @@ def main():
     conf_passed = t1_passed + t2_passed + t3_passed
     conf_rate = conf_passed / max(conf_total, 1)
 
-    # Composite score: 5% build + 5% self-test + 30% tier1 + 30% tier2 + 30% tier3
-    composite = (
-        0.05 * build_success
-        + 0.05 * self_test_pass_rate
-        + 0.30 * t1_rate
-        + 0.30 * t2_rate
-        + 0.30 * t3_rate
-    )
+    # LLM judge results (optional)
+    judge_data = {}
+    judge_score = None
+    judge_stddev = None
+    judge_model = None
+    if args.llm_judge:
+        judge_data = load_judge_results(args.llm_judge)
+        if judge_data and "composite_judge_score" in judge_data:
+            judge_score = judge_data["composite_judge_score"]
+            judge_stddev = judge_data.get("composite_judge_stddev")
+            judge_model = judge_data.get("judge_model")
+
+    # Composite score: with judge (0.05 build + 0.05 self-test + 0.25 T1/T2/T3 + 0.15 judge)
+    # Fallback without judge: 0.05 build + 0.05 self-test + 0.30 T1/T2/T3
+    if judge_score is not None:
+        composite = (
+            0.05 * build_success
+            + 0.05 * self_test_pass_rate
+            + 0.25 * t1_rate
+            + 0.25 * t2_rate
+            + 0.25 * t3_rate
+            + 0.15 * judge_score
+        )
+    else:
+        composite = (
+            0.05 * build_success
+            + 0.05 * self_test_pass_rate
+            + 0.30 * t1_rate
+            + 0.30 * t2_rate
+            + 0.30 * t3_rate
+        )
 
     details = {
         "build_success": build_success,
@@ -3899,6 +4252,14 @@ def main():
         "conformance_pass_rate": round(conf_rate, 4),
         "composite_score": round(composite, 4),
     }
+
+    # Add judge fields if available
+    if judge_score is not None:
+        details["llm_judge_score"] = round(judge_score, 4)
+    if judge_stddev is not None:
+        details["llm_judge_stddev"] = round(judge_stddev, 4)
+    if judge_model is not None:
+        details["llm_judge_model"] = judge_model
 
     # Harbor expects reward.json with exactly one key
     reward = {"composite_score": round(composite, 4)}
@@ -4150,6 +4511,7 @@ def _generate_fullstack_task(fullstack: FullStackTierDef, output_dir: Path) -> N
     (tests_dir / "test.sh").write_text(generate_fullstack_test_sh(fullstack))
     (tests_dir / "mock_server.py").write_text(generate_mock_server())
     (tests_dir / "score.py").write_text(generate_fullstack_score_py())
+    (tests_dir / "llm_judge.py").write_text(generate_llm_judge_py())
     (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
 
     # tests/conformance/

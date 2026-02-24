@@ -34,6 +34,10 @@ class RewardData:
     tier1_conformance: TierConformance | None = None
     tier2_conformance: TierConformance | None = None
     tier3_conformance: TierConformance | None = None
+    # LLM judge results (populated when judge ran successfully)
+    llm_judge_score: float | None = None
+    llm_judge_stddev: float | None = None
+    llm_judge_model: str | None = None
 
     @classmethod
     def from_file(cls, path: Path) -> RewardData:
@@ -68,6 +72,9 @@ class RewardData:
             tier1_conformance=tier_breakdowns.get(1),
             tier2_conformance=tier_breakdowns.get(2),
             tier3_conformance=tier_breakdowns.get(3),
+            llm_judge_score=data.get("llm_judge_score"),
+            llm_judge_stddev=data.get("llm_judge_stddev"),
+            llm_judge_model=data.get("llm_judge_model"),
         )
 
 

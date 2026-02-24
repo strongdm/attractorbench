@@ -42,6 +42,8 @@ class LeaderboardEntry(BaseModel):
     tier1_conformance: float | None = None
     tier2_conformance: float | None = None
     tier3_conformance: float | None = None
+    # LLM judge score (populated when judge ran successfully)
+    llm_judge_score: float | None = None
     # Derived (computed if inputs available)
     tokens_per_point: float | None = None  # total_tokens / avg_composite
     cost_per_point: float | None = None  # cost_usd / avg_composite

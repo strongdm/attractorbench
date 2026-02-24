@@ -3,9 +3,11 @@ import unittest
 from attractorbench.adapter import (
     generate_docker_compose,
     generate_dockerfile,
+    generate_fullstack_score_py,
     generate_harvest_litellm,
     generate_instruction,
     generate_litellm_config,
+    generate_llm_judge_py,
     generate_mock_server,
     generate_run_conformance,
     generate_score_py,
@@ -233,6 +235,84 @@ class AdapterGenerationTests(unittest.TestCase):
         script = generate_fullstack_test_sh(fullstack)
         self.assertIn("--tier 1", script)
         self.assertIn("--suite full", script)
+
+    # --- Gate removal tests ---
+
+    def test_fullstack_test_sh_no_gate(self) -> None:
+        fullstack = load_fullstack_tier()
+        script = generate_fullstack_test_sh(fullstack)
+        self.assertNotIn("T2_CAN_ADVANCE", script)
+        self.assertNotIn("skipped_due_to_tier2", script)
+        # T3 runs unconditionally
+        self.assertIn("Phase 3c: Tier 3 Conformance", script)
+        self.assertIn("--tier 3", script)
+
+    # --- LLM Judge tests ---
+
+    def test_fullstack_test_sh_has_phase4_judge(self) -> None:
+        fullstack = load_fullstack_tier()
+        script = generate_fullstack_test_sh(fullstack)
+        self.assertIn("Phase 4: LLM Judge", script)
+        self.assertIn("llm_judge.py", script)
+        self.assertIn("JUDGE_MODEL", script)
+        self.assertIn("non-fatal", script)
+
+    def test_fullstack_test_sh_passes_llm_judge_to_score(self) -> None:
+        fullstack = load_fullstack_tier()
+        script = generate_fullstack_test_sh(fullstack)
+        self.assertIn("--llm-judge", script)
+        self.assertIn("LLM_JUDGE_FLAG", script)
+
+    def test_llm_judge_py_has_dimensions(self) -> None:
+        judge = generate_llm_judge_py()
+        self.assertIn("spec_coverage", judge)
+        self.assertIn("architectural_compliance", judge)
+        self.assertIn("error_handling", judge)
+        self.assertIn("test_quality", judge)
+        self.assertIn("code_quality", judge)
+
+    def test_llm_judge_py_has_variance_control(self) -> None:
+        judge = generate_llm_judge_py()
+        self.assertIn("CALLS_PER_DIMENSION = 3", judge)
+        self.assertIn("GLOBAL_BUDGET", judge)
+        self.assertIn("stddev", judge)
+
+    def test_llm_judge_py_has_json_response_format(self) -> None:
+        judge = generate_llm_judge_py()
+        self.assertIn("json_object", judge)
+        self.assertIn("temperature", judge)
+
+    def test_llm_judge_py_uses_urllib(self) -> None:
+        judge = generate_llm_judge_py()
+        self.assertIn("import urllib.request", judge)
+        self.assertNotIn("import requests", judge)
+        self.assertNotIn("import openai", judge)
+
+    # --- Updated score formula tests ---
+
+    def test_fullstack_score_py_has_judge_arg(self) -> None:
+        score = generate_fullstack_score_py()
+        self.assertIn("--llm-judge", score)
+
+    def test_fullstack_score_py_has_judge_formula(self) -> None:
+        score = generate_fullstack_score_py()
+        self.assertIn("0.25 * t1_rate", score)
+        self.assertIn("0.25 * t2_rate", score)
+        self.assertIn("0.25 * t3_rate", score)
+        self.assertIn("0.15 * judge_score", score)
+
+    def test_fullstack_score_py_has_fallback_formula(self) -> None:
+        score = generate_fullstack_score_py()
+        # Fallback (no judge) should use 30/30/30
+        self.assertIn("0.30 * t1_rate", score)
+        self.assertIn("0.30 * t2_rate", score)
+        self.assertIn("0.30 * t3_rate", score)
+
+    def test_fullstack_score_py_writes_judge_fields(self) -> None:
+        score = generate_fullstack_score_py()
+        self.assertIn("llm_judge_score", score)
+        self.assertIn("llm_judge_stddev", score)
+        self.assertIn("llm_judge_model", score)
 
 
 if __name__ == "__main__":
