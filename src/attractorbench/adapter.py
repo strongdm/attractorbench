@@ -204,6 +204,10 @@ mkdir -p /logs/verifier
 
 cd /workspace
 
+# Kill anything left on port 9999 from the agent phase
+fuser -k 9999/tcp 2>/dev/null || true
+sleep 0.5
+
 # Start mock LLM server in background
 python3 /tests/mock_server.py >> /logs/verifier/mock-server.log 2>&1 &
 MOCK_PID=$!
@@ -510,9 +514,13 @@ class MockHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Unknown path: {self.path}"}, 404)
 
 
+class ReusableHTTPServer(HTTPServer):
+    allow_reuse_address = True
+
+
 if __name__ == "__main__":
     port = 9999
-    server = HTTPServer(("0.0.0.0", port), MockHandler)
+    server = ReusableHTTPServer(("0.0.0.0", port), MockHandler)
     print(f"Mock LLM server listening on port {port}", file=sys.stderr)
     server.serve_forever()
 '''
@@ -3611,6 +3619,10 @@ trap cleanup EXIT
 mkdir -p /logs/verifier
 
 cd /workspace
+
+# Kill anything left on port 9999 from the agent phase
+fuser -k 9999/tcp 2>/dev/null || true
+sleep 0.5
 
 # Start mock LLM server in background
 python3 /tests/mock_server.py >> /logs/verifier/mock-server.log 2>&1 &
