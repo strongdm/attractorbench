@@ -100,7 +100,7 @@ When a run has valid scores but unreliable efficiency data:
 
 ```
 # 1. Score
-uv run attractorbench score jobs/opus46-stacked-v3
+uv run attractorbench score jobs/opus46-v3
 
 # 2. Generate tables
 make results
@@ -115,5 +115,5 @@ make results
 
 # 5. Commit
 git add LEADERBOARD.md RUN_LOG.md
-git commit -m "Add opus46-stacked-v3 results (score: 0.XXX)"
+git commit -m "Add opus46-v3 results (score: 0.XXX)"
 ```
