@@ -2209,7 +2209,7 @@ def tier3_tests():
             edges = ast.get("edges", [])
             nodes_have_id = all(isinstance(n, dict) and "id" in n for n in nodes) if nodes else False
             has_start = any(
-                n.get("id", "") == "start" or n.get("shape", "") == "Mdiamond"
+                isinstance(n, dict) and (n.get("id", "") == "start" or n.get("shape", "") == "Mdiamond")
                 for n in nodes
             ) if nodes else False
             edges_valid = all(
@@ -2295,7 +2295,7 @@ def tier3_tests():
         else:
             diags_list = []
         has_error = any(
-            d.get("severity", "") in ("error", "Error")
+            (isinstance(d, dict) and d.get("severity", "") in ("error", "Error"))
             or "start" in str(d).lower()
             for d in diags_list
         )
@@ -2320,7 +2320,7 @@ def tier3_tests():
         else:
             diags_list = []
         has_warning = any(
-            d.get("severity", "") in ("warning", "Warning")
+            (isinstance(d, dict) and d.get("severity", "") in ("warning", "Warning"))
             or "orphan" in str(d).lower()
             or "unreachable" in str(d).lower()
             for d in diags_list
@@ -2344,7 +2344,7 @@ def tier3_tests():
             diags_list = diags
         else:
             diags_list = []
-        errors = [d for d in diags_list if d.get("severity", "") in ("error", "Error")]
+        errors = [d for d in diags_list if isinstance(d, dict) and d.get("severity", "") in ("error", "Error")]
         t.passed = code == 0 and len(errors) == 0
     except (json.JSONDecodeError, ValueError):
         t.passed = code == 0
@@ -2543,7 +2543,7 @@ def tier3_tests():
         else:
             diags_list = []
         has_issue = any(
-            d.get("severity", "") in ("error", "Error", "warning", "Warning")
+            (isinstance(d, dict) and d.get("severity", "") in ("error", "Error", "warning", "Warning"))
             or "exit" in str(d).lower()
             or "terminal" in str(d).lower()
             or "msquare" in str(d).lower()
@@ -2570,7 +2570,7 @@ def tier3_tests():
         else:
             diags_list = []
         has_issue = any(
-            d.get("severity", "") in ("error", "Error", "warning", "Warning")
+            (isinstance(d, dict) and d.get("severity", "") in ("error", "Error", "warning", "Warning"))
             or "nonexistent" in str(d).lower()
             or "undefined" in str(d).lower()
             or "unknown" in str(d).lower()
@@ -2612,7 +2612,7 @@ def tier3_tests():
         else:
             diags_list = []
         has_warning = any(
-            d.get("severity", "") in ("warning", "Warning")
+            (isinstance(d, dict) and d.get("severity", "") in ("warning", "Warning"))
             or "prompt" in str(d).lower()
             for d in diags_list
         )
