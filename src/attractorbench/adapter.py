@@ -6,6 +6,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from attractorbench import __version__ as _bench_version
 from attractorbench.tiers import FullStackTierDef, TierDef, load_fullstack_tier, load_tiers
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
@@ -21,6 +22,7 @@ author_email = "attractorbench@example.com"
 difficulty = "{difficulty}"
 category = "programming"
 tags = ["nlspec", "attractor", "coding-agent", "tier{tier.tier}"]
+benchmark_version = "{_bench_version}"
 
 [agent]
 timeout_sec = {tier.agent_timeout}.0
@@ -200,6 +202,7 @@ cleanup() {{
 }}
 trap cleanup EXIT
 
+export ATTRACTORBENCH_VERSION="{_bench_version}"
 mkdir -p /logs/verifier
 
 cd /workspace
@@ -3394,9 +3397,12 @@ def main():
         print("  No LiteLLM usage data; falling back to Gemini trajectory")
         usage = parse_gemini_trajectory(GEMINI_TRAJECTORY)
 
+    bench_version = os.environ.get("ATTRACTORBENCH_VERSION", "")
+
     metadata = {
         "agent": agent,
         "model": model,
+        "bench_version": bench_version,
     }
 
     if usage:
@@ -3442,6 +3448,7 @@ author_email = "attractorbench@example.com"
 difficulty = "hard"
 category = "programming"
 tags = [{tags_str}]
+benchmark_version = "{_bench_version}"
 
 [agent]
 timeout_sec = {fullstack.agent_timeout}.0
@@ -3604,18 +3611,19 @@ WORKDIR /workspace
 
 def generate_fullstack_test_sh(fullstack: FullStackTierDef) -> str:
     """Generate test.sh for the combined full-stack task."""
-    return """#!/bin/bash
+    return f"""#!/bin/bash
 # attractorbench Full Stack: Tiers 1-3 - Verifier
 set -uo pipefail
 set +e
 
-cleanup() {
-  if [ -n "${MOCK_PID:-}" ]; then
+cleanup() {{
+  if [ -n "${{MOCK_PID:-}}" ]; then
     kill "$MOCK_PID" 2>/dev/null || true
   fi
-}
+}}
 trap cleanup EXIT
 
+export ATTRACTORBENCH_VERSION="{_bench_version}"
 mkdir -p /logs/verifier
 
 cd /workspace
@@ -3629,7 +3637,7 @@ python3 /tests/mock_server.py >> /logs/verifier/mock-server.log 2>&1 &
 MOCK_PID=$!
 
 # Wait for mock server readiness
-for _ in {1..20}; do
+for _ in {{1..20}}; do
   if curl -fsS http://localhost:9999/health >/dev/null 2>&1; then
     break
   fi
@@ -3693,8 +3701,8 @@ echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conform
 
 # Phase 4: LLM Judge (non-fatal)
 echo "=== Phase 4: LLM Judge ===" | tee /logs/verifier/llm_judge.log
-JUDGE_MODEL="${ATTRACTORBENCH_JUDGE_MODEL:-gpt-4o}"
-JUDGE_BASE_URL="${ATTRACTORBENCH_JUDGE_BASE_URL:-http://litellm:4000/v1}"
+JUDGE_MODEL="${{ATTRACTORBENCH_JUDGE_MODEL:-gpt-4o}}"
+JUDGE_BASE_URL="${{ATTRACTORBENCH_JUDGE_BASE_URL:-http://litellm:4000/v1}}"
 python3 /tests/llm_judge.py \
   --specs-dir /workspace/specs --workspace-dir /workspace \
   --conformance-dir /logs/verifier \
