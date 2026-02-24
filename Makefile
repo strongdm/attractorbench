@@ -35,19 +35,19 @@ test:
 
 run-sonnet: generate
 	harbor run --path ./tasks --agent claude-code --model anthropic/claude-sonnet-4-6 \
-		--env docker --job-name sonnet46-v$(V) $(EXTRA_ARGS)
+		--env docker --timeout-multiplier 2 --job-name sonnet46-v$(V) $(EXTRA_ARGS)
 	uv run attractorbench score jobs/sonnet46-v$(V)
 	$(MAKE) results
 
 run-opus: generate
 	harbor run --path ./tasks --agent claude-code --model anthropic/claude-opus-4-6 \
-		--env docker --job-name opus46-v$(V) $(EXTRA_ARGS)
+		--env docker --timeout-multiplier 2 --job-name opus46-v$(V) $(EXTRA_ARGS)
 	uv run attractorbench score jobs/opus46-v$(V)
 	$(MAKE) results
 
 run-gpt52: generate
 	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
-		--env docker --job-name gpt52-codex-v$(V) $(EXTRA_ARGS)
+		--env docker --timeout-multiplier 2 --job-name gpt52-codex-v$(V) $(EXTRA_ARGS)
 	uv run attractorbench score jobs/gpt52-codex-v$(V)
 	$(MAKE) results
 
