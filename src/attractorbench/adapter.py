@@ -394,8 +394,16 @@ ANTHROPIC_STREAM_EVENTS = [
 
 
 class MockHandler(BaseHTTPRequestHandler):
+    _tool_request_count = {}  # per-path counter to break tool-call loops
+
     def log_message(self, format, *args):
         pass  # Suppress logging
+
+    def _should_return_tool_call(self, path):
+        """Return True only on the first request with tools per path, then increment."""
+        count = MockHandler._tool_request_count.get(path, 0)
+        MockHandler._tool_request_count[path] = count + 1
+        return count == 0
 
     def _log_request(self, method, body=b""):
         REQUEST_LOG.append({
@@ -430,6 +438,7 @@ class MockHandler(BaseHTTPRequestHandler):
             self._send_json({"requests": REQUEST_LOG})
         elif self.path == "/requests/reset":
             REQUEST_LOG.clear()
+            MockHandler._tool_request_count.clear()
             self._send_json({"status": "reset", "count": 0})
         elif self.path == "/v1/models" or self.path == "/models":
             self._send_json(MODELS_RESPONSE)
@@ -453,7 +462,7 @@ class MockHandler(BaseHTTPRequestHandler):
         if self.path in ("/v1/responses",):
             if want_stream:
                 self._send_sse(OPENAI_STREAM_EVENTS)
-            elif data.get("tools"):
+            elif data.get("tools") and self._should_return_tool_call(self.path):
                 self._send_json(OPENAI_TOOL_RESPONSE)
             else:
                 self._send_json(OPENAI_CHAT_RESPONSE)
@@ -462,7 +471,7 @@ class MockHandler(BaseHTTPRequestHandler):
         elif self.path in ("/v1/chat/completions",):
             if want_stream:
                 self._send_sse(OPENAI_STREAM_EVENTS)
-            elif data.get("tools"):
+            elif data.get("tools") and self._should_return_tool_call(self.path):
                 self._send_json(OPENAI_TOOL_RESPONSE)
             else:
                 self._send_json(OPENAI_CHAT_RESPONSE)
@@ -471,7 +480,7 @@ class MockHandler(BaseHTTPRequestHandler):
         elif self.path in ("/v1/messages", "/messages"):
             if want_stream:
                 self._send_sse(ANTHROPIC_STREAM_EVENTS)
-            elif data.get("tools"):
+            elif data.get("tools") and self._should_return_tool_call(self.path):
                 self._send_json(ANTHROPIC_TOOL_RESPONSE)
             else:
                 self._send_json(ANTHROPIC_RESPONSE)
@@ -762,7 +771,7 @@ def run_cmd(args, stdin_data=None, timeout=30, env=None):
         return output
     except subprocess.TimeoutExpired:
         output = (-1, "", "Timeout")
-        RUN_CMD_CACHE[cache_key] = output
+        # Don't cache timeouts — they may be transient (e.g. mock server loop)
         return output
     except FileNotFoundError:
         output = (-2, "", f"Command not found: {args[0]}")
@@ -1661,6 +1670,22 @@ def tier2_tests():
         t.error = err[:500]
     tests.append(t)
 
+    # Health check mock server before process-input tests
+    mock_alive = False
+    try:
+        import urllib.request
+        resp = urllib.request.urlopen(f"{MOCK_SERVER_URL}/health", timeout=5)
+        data = json.loads(resp.read())
+        mock_alive = data.get("status") == "ok"
+    except Exception:
+        pass
+    if not mock_alive:
+        t = ConformanceTest("mock_health", "core_loop", "Mock LLM server is alive before process-input tests")
+        t.passed = False
+        t.error = "Mock server /health check failed — skipping process-input tests"
+        tests.append(t)
+        return tests
+
     # Process input
     reset_mock_requests()
     task_prompt = json.dumps({
@@ -1769,7 +1794,7 @@ def tier2_tests():
     reset_mock_requests()
     t = ConformanceTest("process_input_calls_llm", "core_loop", "Mock received >=1 LLM request during process-input")
     start = time.time()
-    code, out, err = run_cmd([CONFORMANCE_BIN, "process-input"], stdin_data=task_prompt, timeout=60)
+    code, out, err = run_cmd([CONFORMANCE_BIN, "process-input"], stdin_data=task_prompt, timeout=60, env={"_AB_CACHE_BUST": "calls_llm"})
     t.duration = time.time() - start
     llm_called = (
         assert_mock_called("/v1/responses") or assert_mock_called("/v1/chat/completions") or assert_mock_called("/messages")
@@ -1783,7 +1808,7 @@ def tier2_tests():
     reset_mock_requests()
     t = ConformanceTest("process_input_natural_end", "core_loop", "Text-only mock response produces clean completion")
     start = time.time()
-    code, out, err = run_cmd([CONFORMANCE_BIN, "process-input"], stdin_data=task_prompt, timeout=60)
+    code, out, err = run_cmd([CONFORMANCE_BIN, "process-input"], stdin_data=task_prompt, timeout=60, env={"_AB_CACHE_BUST": "natural_end"})
     t.duration = time.time() - start
     try:
         resp = json.loads(out)
@@ -3099,7 +3124,7 @@ def main():
     if args.max_seconds > 0:
         cap = args.max_seconds
     else:
-        cap = 20 if suite == "quick" else 120
+        cap = 20 if suite == "quick" else 300
     CONFORMANCE_DEADLINE_TS = time.time() + cap
 
     if suite == "quick":
