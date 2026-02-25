@@ -6,6 +6,15 @@
 V ?= 1
 EXTRA_ARGS ?=
 
+# ── Results & Leaderboard ──────────────────────────────────────────
+# `make results` generates results/*.md with AUTHORITATIVE token/cost
+# data computed from Harbor's result.json + litellm pricing tables.
+#
+# IMPORTANT: When updating LEADERBOARD.md or RUN_LOG.md, ALWAYS copy
+# token counts, wall times, and costs from results/*.md. NEVER write
+# "-" or "unknown" for these fields — the data is there. Run
+# `make results` first, then copy the numbers.
+
 results:
 	@mkdir -p results
 	@JOB_DIRS="$$(find jobs -maxdepth 1 -mindepth 1 -type d -print)"; \
@@ -15,7 +24,11 @@ results:
 		fi; \
 		uv run attractorbench leaderboard $$JOB_DIRS --markdown > results/leaderboard.md; \
 		uv run attractorbench run-log $$JOB_DIRS --markdown > results/run_log.md; \
-		echo "Wrote raw tables to results/*.md — use these to update LEADERBOARD.md and RUN_LOG.md"
+		echo ""; \
+		echo "=== REFERENCE DATA (results/*.md) ==="; \
+		echo "Copy token/cost data from these files into LEADERBOARD.md and RUN_LOG.md."; \
+		echo "Do NOT leave '-' for tokens or costs — the data is computed from Harbor results."; \
+		echo ""
 
 specs-sync:
 	python3 scripts/sync_specs.py
