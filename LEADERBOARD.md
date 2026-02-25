@@ -38,7 +38,7 @@ Criteria:
 | Metric | Run | Agent | Model | Value |
 |--------|-----|-------|-------|-------|
 | Best score | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 |
-| Best full-stack | gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 |
+| Best full-stack | gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 (full-stack) |
 | Best speed | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 12m26s |
 | Best token efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 4.1M tokens/point |
 | Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $8.80/point |
@@ -48,10 +48,10 @@ Criteria:
 | Run | Agent | Model | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost |
 |-----|-------|-------|------:|---:|---:|---:|------:|-------:|-----:|-----:|
 | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0%* | 14.9M | 2h07m | $6.41 |
-| gpt53codex-v3 | codex | gpt-5.3-codex | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | - | 22m41s | - |
-| opus46-v8 | claude-code | claude-opus-4-6 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0%* | - | 38m49s | - |
-| gpt52-high-v3 | codex | gpt-5.2 (high) | 0.750 | 23.5% | 73.7% | 92.6% | 50.0% | - | 22m19s | - |
-| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.631 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | - |
+| gpt53codex-v3 | codex | gpt-5.3-codex | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 |
+| opus46-v8 | claude-code | claude-opus-4-6 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0%* | 14.3M | 38m03s | $10.14 |
+| gpt52-high-v3 | codex | gpt-5.2 (high) | 0.750 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 |
+| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.631 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | $6.94 |
 
 \* Judge used GPT-4o (pre-upgrade). All other judge scores use GPT-5.2 (reasoning_effort=high).
 
