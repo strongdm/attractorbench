@@ -1,7 +1,7 @@
 .PHONY: results specs-sync specs-update generate test \
-	run-sonnet run-opus run-gpt52 run-gpt53-high \
+	run-sonnet run-opus run-gpt52 run-gpt52-high run-gpt53-high \
 	run-gemini31 run-gemini31ct run-gemini25pro \
-	run-gemini31ct-opencode
+	run-gemini31ct-opencode run-slate
 
 V ?= 1
 EXTRA_ARGS ?=
@@ -42,6 +42,37 @@ generate:
 test:
 	uv run pytest tests/ -v
 
+# ── Default slate ─────────────────────────────────────────────────
+# The "default slate" — the 5 runs we do every day.
+# Usage:  make run-slate V=12
+# Runs all 5 in parallel, then scores and rebuilds results.
+
+run-slate: generate
+	@echo "=== Running default slate (V=$(V)) ==="
+	@echo "  opus46-v$(V)  sonnet46-v$(V)  gpt53codex-high-v$(V)  gemini31ct-v$(V)  gpt52-high-v$(V)"
+	@echo ""
+	@harbor run --path ./tasks --agent claude-code --model anthropic/claude-opus-4-6 \
+		--env docker --timeout-multiplier 2 --job-name opus46-v$(V) $(EXTRA_ARGS) & \
+	harbor run --path ./tasks --agent claude-code --model anthropic/claude-sonnet-4-6 \
+		--env docker --timeout-multiplier 2 --job-name sonnet46-v$(V) $(EXTRA_ARGS) & \
+	harbor run --path ./tasks --agent codex --model openai/gpt-5.3-codex \
+		--env docker --timeout-multiplier 2 --agent-kwarg reasoning_effort=high \
+		--job-name gpt53codex-high-v$(V) $(EXTRA_ARGS) & \
+	harbor run --path ./tasks --agent gemini-cli --model google/gemini-3.1-pro-preview-customtools \
+		--env docker --job-name gemini31ct-v$(V) $(EXTRA_ARGS) & \
+	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
+		--env docker --timeout-multiplier 2 --agent-kwarg reasoning_effort=high \
+		--job-name gpt52-high-v$(V) $(EXTRA_ARGS) & \
+	wait
+	@echo ""
+	@echo "=== All runs complete. Scoring... ==="
+	uv run attractorbench score jobs/opus46-v$(V)
+	uv run attractorbench score jobs/sonnet46-v$(V)
+	uv run attractorbench score jobs/gpt53codex-high-v$(V)
+	uv run attractorbench score jobs/gemini31ct-v$(V)
+	uv run attractorbench score jobs/gpt52-high-v$(V)
+	$(MAKE) results
+
 # ── Agent run targets ──────────────────────────────────────────────
 # Usage:  make run-sonnet V=2 EXTRA_ARGS="--n-concurrent 2"
 # Each target: generates tasks → runs Harbor → scores → updates results
@@ -62,6 +93,13 @@ run-gpt52: generate
 	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
 		--env docker --timeout-multiplier 2 --job-name gpt52-codex-v$(V) $(EXTRA_ARGS)
 	uv run attractorbench score jobs/gpt52-codex-v$(V)
+	$(MAKE) results
+
+run-gpt52-high: generate
+	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
+		--env docker --timeout-multiplier 2 --agent-kwarg reasoning_effort=high \
+		--job-name gpt52-high-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gpt52-high-v$(V)
 	$(MAKE) results
 
 run-gpt53-high: generate
