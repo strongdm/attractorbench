@@ -17,11 +17,13 @@ Changes: T2→T3 gate removed, LLM-as-judge added (15% weight), scoring formula 
 
 | Run | Agent | Model | Effort | Tasks | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost | Date | Notes |
 |-----|-------|-------|--------|------:|------:|---:|---:|---:|------:|-------:|-----:|-----:|------|-------|
-| gpt53codex-v1 | codex | gpt-5.3-codex | unknown | 2 | 0.854 | 82.3% | 79.0% | 100.0% | 70.0% | - | 16m44s | - | 2026-02-25 | first GPT-5.3-codex run; perfect T3 |
+| gpt53codex-v3 | codex | gpt-5.3-codex | unknown | 2 | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | - | 22m41s | - | 2026-02-25 | judge upgraded to gpt-5.2 |
+| gpt53codex-v1 | codex | gpt-5.3-codex | unknown | 2 | 0.854 | 82.3% | 79.0% | 100.0% | 70.0% | - | 16m44s | - | 2026-02-25 | first GPT-5.3-codex run; perfect T3; gpt-4o judge |
 | sonnet46-v3 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0% | 14.9M | 2h07m | $6.41 | 2026-02-25 | first clean v2.0.0 sonnet run |
 | opus46-v8 | claude-code | claude-opus-4-6 | unknown | 2 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0% | - | 38m49s | - | 2026-02-25 | improved over v3 |
 | opus46-v3 | claude-code | claude-opus-4-6 | unknown | 2 | 0.784 | 23.5% | 89.5% | 92.6% | 60.0% | 10.8M | 25m55s | $7.19 | 2026-02-25 | first clean v2.0.0 opus run |
-| gpt52-high-v1 | codex | gpt-5.2 (high) | high | 2 | 0.730 | 23.5% | 57.9% | 92.6% | 50.0% | - | 19m21s | - | 2026-02-25 | first GPT-5.2 high-effort v2.0.0 run |
+| gpt52-high-v3 | codex | gpt-5.2 (high) | high | 2 | 0.750 | 23.5% | 73.7% | 92.6% | 50.0% | - | 22m19s | - | 2026-02-25 | judge upgraded to gpt-5.2 |
+| gpt52-high-v1 | codex | gpt-5.2 (high) | high | 2 | 0.730 | 23.5% | 57.9% | 92.6% | 50.0% | - | 19m21s | - | 2026-02-25 | first GPT-5.2 high-effort v2.0.0 run; gpt-4o judge |
 | sonnet46-v8 | claude-code | claude-sonnet-4-6 | unknown | 1 | 0.806 | 73.5% | 89.5% | 96.3% | 50.0% | - | 24m41s | - | 2026-02-25 | tier0 RuntimeError (1 trial only); full-stack 0.806 |
 | gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.631 | 20.6% | 31.6% | 22.2% | 50.0% | 3.3M | 27m56s | - | 2026-02-25 | slight improvement over v3 |
 | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.624 | 17.6% | 15.8% | 55.6% | 50.0% | 2.5M | 12m26s | $5.49 | 2026-02-25 | first clean v2.0.0 gemini run |

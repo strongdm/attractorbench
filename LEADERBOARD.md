@@ -18,9 +18,9 @@ Comparability policy:
 
 New scoring formula: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge).
 
-**Latest batch (2026-02-25):** Five new runs including the first GPT-5.3-codex and GPT-5.2 (high effort) trials. GPT-5.3-codex debuts strong at 0.854 mean with the highest full-stack conformance (87.5%) and **perfect T3 conformance** (27/27, 100%) — the first agent to achieve this. Sonnet 4.6 retains the overall lead at 0.870 mean (boosted by a clean tier0 run). Opus 4.6 improved to 0.808 mean, overtaking its v3 result. GPT-5.2 with high reasoning effort scored 0.730 (full-stack 0.560), trailing GPT-5.3-codex significantly.
+**Judge model upgraded (2026-02-25):** The LLM judge was switched from GPT-4o to GPT-5.2 (reasoning_effort=high) for stronger evaluation signal. Earlier runs used the GPT-4o judge; runs from gpt53codex-v3 / gpt52-high-v3 onward use GPT-5.2.
 
-The overall score leader remains `sonnet46-v3` (0.870 mean), but `gpt53codex-v1` holds the best full-stack score (0.808) and best single-tier conformance (T3: 100%). Sonnet and Opus continue to dominate T2 conformance (89.5% and 84.2% respectively). Gemini remains the fastest and cheapest but trails substantially on conformance.
+GPT-5.3-codex leads among GPT models at 0.833 mean (full-stack 0.765, T3: 96.3%). GPT-5.2 with high reasoning effort scores 0.750 (full-stack 0.600, T3: 92.6%). Both show strong T3 conformance but weaker T1. Sonnet 4.6 retains the overall lead at 0.870 mean (with the earlier GPT-4o judge). Opus 4.6 holds at 0.808 mean. Gemini remains the fastest and cheapest but trails substantially on conformance.
 
 > **v1.0.0 → v2.0.0 migration:** Scores are not directly comparable across versions.
 > v1.0.0 runs had T3 gated (always 0%) and no judge component. v2.0.0 runs typically
@@ -38,7 +38,7 @@ Criteria:
 | Metric | Run | Agent | Model | Value |
 |--------|-----|-------|-------|-------|
 | Best score | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 |
-| Best full-stack | gpt53codex-v1 | codex | gpt-5.3-codex | 0.808 |
+| Best full-stack | gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 |
 | Best speed | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 12m26s |
 | Best token efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 4.1M tokens/point |
 | Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $8.80/point |
@@ -47,11 +47,13 @@ Criteria:
 
 | Run | Agent | Model | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost |
 |-----|-------|-------|------:|---:|---:|---:|------:|-------:|-----:|-----:|
-| sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0% | 14.9M | 2h07m | $6.41 |
-| gpt53codex-v1 | codex | gpt-5.3-codex | 0.854 | 82.3% | 79.0% | 100.0% | 70.0% | - | 16m44s | - |
-| opus46-v8 | claude-code | claude-opus-4-6 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0% | - | 38m49s | - |
-| gpt52-high-v1 | codex | gpt-5.2 (high) | 0.730 | 23.5% | 57.9% | 92.6% | 50.0% | - | 19m21s | - |
-| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.631 | 20.6% | 31.6% | 22.2% | 50.0% | 3.3M | 27m56s | - |
+| sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0%* | 14.9M | 2h07m | $6.41 |
+| gpt53codex-v3 | codex | gpt-5.3-codex | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | - | 22m41s | - |
+| opus46-v8 | claude-code | claude-opus-4-6 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0%* | - | 38m49s | - |
+| gpt52-high-v3 | codex | gpt-5.2 (high) | 0.750 | 23.5% | 73.7% | 92.6% | 50.0% | - | 22m19s | - |
+| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.631 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | - |
+
+\* Judge used GPT-4o (pre-upgrade). All other judge scores use GPT-5.2 (reasoning_effort=high).
 
 ## Historical Bests (bench_version=1.0.0)
 

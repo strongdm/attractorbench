@@ -3950,8 +3950,7 @@ Example: {{"reasoning": "The implementation covers most spec sections...", "scor
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_prompt},
         ],
-        "temperature": 0.0,
-        "max_tokens": 500,
+        "max_completion_tokens": 2000,
         "reasoning_effort": "high",
         "response_format": {"type": "json_object"},
     }

@@ -280,7 +280,7 @@ class AdapterGenerationTests(unittest.TestCase):
     def test_llm_judge_py_has_json_response_format(self) -> None:
         judge = generate_llm_judge_py()
         self.assertIn("json_object", judge)
-        self.assertIn("temperature", judge)
+        self.assertIn("reasoning_effort", judge)
 
     def test_llm_judge_py_uses_urllib(self) -> None:
         judge = generate_llm_judge_py()
