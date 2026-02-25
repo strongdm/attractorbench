@@ -13,12 +13,12 @@
       "tags": ["nlspec", "attractor", "smoke-test", "plumbing"]
     },
     {
-      "id": "full-stack",
-      "name": "Full Stack (Tiers 1-3)",
+      "id": "main",
+      "name": "Main (Tiers 1-3)",
       "description": "Build three layers (Unified LLM SDK, Coding Agent Loop, and Attractor Pipeline) in a single workspace",
       "difficulty": "hard",
       "category": "programming",
-      "tags": ["nlspec", "attractor", "full-stack", "tier1", "tier2", "tier3"]
+      "tags": ["nlspec", "attractor", "main", "tier1", "tier2", "tier3"]
     }
   ]
 }

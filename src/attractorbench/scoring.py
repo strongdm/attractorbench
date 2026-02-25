@@ -11,7 +11,7 @@ from typing import Any
 
 @dataclass
 class TierConformance:
-    """Per-tier conformance breakdown (for full-stack tasks)."""
+    """Per-tier conformance breakdown (for main task)."""
 
     total: int = 0
     passed: int = 0
@@ -30,7 +30,7 @@ class RewardData:
     conformance_pass_rate: float = 0.0
     dod_scores: dict[str, float] = field(default_factory=dict)
     composite_score: float = 0.0
-    # Per-tier conformance breakdowns (populated for full-stack tasks)
+    # Per-tier conformance breakdowns (populated for main task)
     tier1_conformance: TierConformance | None = None
     tier2_conformance: TierConformance | None = None
     tier3_conformance: TierConformance | None = None
@@ -148,7 +148,7 @@ def compare_jobs(job_dirs: list[Path]) -> list[dict[str, Any]]:
     return rows
 
 
-_TASK_SLUG_RE = re.compile(r"^(tier\d+-[a-z0-9-]+|full-stack)$")
+_TASK_SLUG_RE = re.compile(r"^(tier\d+-[a-z0-9-]+|main|full-stack)$")
 
 
 def _infer_task_name(reward_file: Path, job_dir: Path) -> str:

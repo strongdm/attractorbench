@@ -16,7 +16,7 @@ Scoring is granular. Each tier has multiple conformance tests grouped by DoD sec
 Key properties:
 - **Language-agnostic.** Agents choose their own implementation language. The only contract is `make build`, `make test`, and `./bin/conformance <subcommand>`.
 - **Deterministic verifier.** A mock LLM server returns canned responses (no real API calls). Agents can still be non-deterministic.
-- **Weighted composite score.** Full-stack: 5% build + 5% self-test + 30% each for T1/T2/T3 conformance. Single-tier: 10% build + 10% self-test + 80% conformance.
+- **Weighted composite score.** Main task: 5% build + 5% self-test + 30% each for T1/T2/T3 conformance. Single-tier: 10% build + 10% self-test + 80% conformance.
 - **Cost-aware.** Track tokens and dollars per unit of compliance alongside raw scores.
 
 ## Tiers
@@ -175,14 +175,14 @@ No extra configuration needed. If an agent produces ATIF trajectories (like `cla
 ### Composite Score
 
 ```
-# Full-stack task
+# Main task (tiers 1-3 combined)
 composite = 0.05 * build + 0.05 * self_test + 0.30 * T1 + 0.30 * T2 + 0.30 * T3
 
 # Single-tier tasks (tier0/tier1/tier2/tier3)
 composite = 0.10 * build + 0.10 * self_test + 0.80 * conformance
 ```
 
-The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% on full-stack; 80% on single-tier), i.e. the spec-following tests we control. Self-test credit (5% full-stack; 10% single-tier) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile can still earn the build weight, but almost all of the score comes from self-tests + conformance.
+The composite score ranges from 0.0 to 1.0. The weighting heavily favors conformance (90% on the main task; 80% on single-tier), i.e. the spec-following tests we control. Self-test credit (5% main; 10% single-tier) requires a real test runner (pytest, go test, jest, etc.) and penalizes suites with fewer than 5 tests. A no-op Makefile can still earn the build weight, but almost all of the score comes from self-tests + conformance.
 
 ### Score Interpretation (Tier 1)
 

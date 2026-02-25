@@ -38,7 +38,7 @@ class LeaderboardEntry(BaseModel):
     wall_seconds: float | None = None
     tool_calls: int | None = None
     cost_usd: float | None = None
-    # Per-tier conformance rates (populated for full-stack tasks)
+    # Per-tier conformance rates (populated for main task)
     tier1_conformance: float | None = None
     tier2_conformance: float | None = None
     tier3_conformance: float | None = None

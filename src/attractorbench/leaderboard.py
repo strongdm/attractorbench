@@ -21,8 +21,11 @@ _CANONICAL_TASKS = {
     "tier1-unified-llm",
     "tier2-agent-loop",
     "tier3-attractor",
-    "full-stack",
+    "main",
+    "full-stack",  # backwards compat with old job dirs
 }
+
+_TIER0_TASKS = {"tier0-smoke-test"}
 
 
 def _is_curriculum_task_name(task_name: str) -> bool:
@@ -344,8 +347,16 @@ def build_leaderboard(job_dirs: list[Path], *, include_curriculum: bool = False)
 
         metadata = load_run_metadata(job_dir)
 
-        count = len(results)
-        rewards = list(results.values())
+        # Exclude tier0 (smoke test) from aggregate scores — it's a sanity
+        # check, not a benchmark task.  The headline score should reflect
+        # only the substantive task(s).
+        scored_results = {k: v for k, v in results.items()
+                         if k.split("#", 1)[0] not in _TIER0_TASKS}
+        if not scored_results:
+            scored_results = results  # fallback: tier0-only job
+
+        count = len(scored_results)
+        rewards = list(scored_results.values())
         build_rate = sum(1 for r in rewards if r.build_success) / count
         avg_self = sum(r.self_test_pass_rate for r in rewards) / count
         avg_conf = sum(r.conformance_pass_rate for r in rewards) / count
@@ -571,7 +582,14 @@ def build_run_log(job_dirs: list[Path]) -> list[RunLogEntry]:
             continue
 
         metadata = load_run_metadata(job_dir)
-        rewards = list(results.values())
+
+        # Exclude tier0 from aggregate scores (same as leaderboard)
+        scored_results = {k: v for k, v in results.items()
+                         if k.split("#", 1)[0] not in _TIER0_TASKS}
+        if not scored_results:
+            scored_results = results  # fallback: tier0-only job
+
+        rewards = list(scored_results.values())
         count = len(rewards)
         avg_composite = sum(r.composite_score for r in rewards) / count
 

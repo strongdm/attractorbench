@@ -25,7 +25,10 @@ New scoring formula: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% j
 
 **Judge model upgraded (2026-02-25):** The LLM judge was switched from GPT-4o to GPT-5.2 (reasoning_effort=high) for stronger evaluation signal. Earlier runs used the GPT-4o judge; runs from gpt53codex-v3 / gpt52-high-v3 onward use GPT-5.2.
 
-GPT-5.3-codex leads among GPT models at 0.833 mean (full-stack 0.765, T3: 96.3%). GPT-5.2 with high reasoning effort scores 0.750 (full-stack 0.600, T3: 92.6%). Both show strong T3 conformance but weaker T1. Sonnet 4.6 retains the overall lead at 0.870 mean (with the earlier GPT-4o judge). Opus 4.6 holds at 0.808 mean. Gemini remains the fastest and cheapest but trails substantially on conformance.
+GPT-5.3-codex leads among GPT models at 0.765 (T3: 96.3%). GPT-5.2 with high reasoning effort scores 0.600 (T3: 92.6%). Both show strong T3 conformance but weaker T1. Sonnet 4.6 retains the overall lead at 0.840 (with the earlier GPT-4o judge). Opus 4.6 holds at 0.716. Gemini remains the fastest and cheapest but trails substantially on conformance.
+
+> **Scoring change:** Tier 0 (smoke test) is no longer included in the headline score.
+> The score now reflects only the main task (tiers 1-3 combined).
 
 > **v1.0.0 → v2.0.0 migration:** Scores are not directly comparable across versions.
 > v1.0.0 runs had T3 gated (always 0%) and no judge component. v2.0.0 runs typically
@@ -34,29 +37,29 @@ GPT-5.3-codex leads among GPT models at 0.833 mean (full-stack 0.765, T3: 96.3%)
 ## Current Bests (bench_version=2.0.0)
 
 Criteria:
-- Best score: highest composite score (mean across tasks).
-- Best full-stack: highest full-stack composite (excludes tier0).
+- Best score: highest composite score (main task only, excludes tier0).
 - Best speed: shortest wall time among runs with score > 0.
 - Best token efficiency: lowest tokens per score point.
 - Best dollar efficiency: lowest $ per score point.
 
 | Metric | Run | Agent | Model | Value |
 |--------|-----|-------|-------|-------|
-| Best score | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 |
-| Best full-stack | gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 (full-stack) |
+| Best score | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.840 |
 | Best speed | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 12m26s |
 | Best token efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 4.1M tokens/point |
 | Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $8.80/point |
 
 ## Snapshot Table (bench_version=2.0.0, Best Per Agent/Model, By Score)
 
+> Scores reflect main task only (tier0 smoke test excluded).
+
 | Run | Agent | Model | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost |
 |-----|-------|-------|------:|---:|---:|---:|------:|-------:|-----:|-----:|
-| sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0%* | 14.9M | 2h07m | $6.41 |
-| gpt53codex-v3 | codex | gpt-5.3-codex | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 |
-| opus46-v8 | claude-code | claude-opus-4-6 | 0.808 | 23.5% | 84.2% | 88.9% | 50.0%* | 14.3M | 38m03s | $10.14 |
-| gpt52-high-v3 | codex | gpt-5.2 (high) | 0.750 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 |
-| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.631 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | $6.94 |
+| sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.840 | 82.3% | 68.4% | 88.9% | 60.0%* | 14.9M | 2h07m | $6.41 |
+| gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 |
+| opus46-v8 | claude-code | claude-opus-4-6 | 0.716 | 23.5% | 84.2% | 88.9% | 50.0%* | 14.3M | 38m03s | $10.14 |
+| gpt52-high-v3 | codex | gpt-5.2 (high) | 0.600 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 |
+| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.362 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | $6.94 |
 
 \* Judge used GPT-4o (pre-upgrade). All other judge scores use GPT-5.2 (reasoning_effort=high).
 

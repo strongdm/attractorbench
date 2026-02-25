@@ -38,7 +38,7 @@ def _parse_tier_numbers(raw_tiers: Optional[str]) -> list[int] | None:
 def generate(
     tiers: Annotated[Optional[str], typer.Option(help="Comma-separated tier numbers (e.g. 1,2,3)")] = None,
     output_dir: Annotated[Path, typer.Option(help="Output directory for task dirs")] = Path("tasks"),
-    individual: Annotated[bool, typer.Option("--individual", help="Generate tiers as separate tasks instead of combined full-stack")] = False,
+    individual: Annotated[bool, typer.Option("--individual", help="Generate tiers as separate tasks instead of combined main task")] = False,
     curriculum: Annotated[bool, typer.Option("--curriculum", help="Also generate optional curriculum subtier tasks")] = False,
 ) -> None:
     """Generate Harbor-compatible task directories from specs."""
@@ -52,15 +52,15 @@ def generate(
         raise typer.BadParameter(str(exc), param_hint="--tiers") from exc
 
     console.print(f"Generating tasks for {len(tier_defs)} tier(s)...")
-    generated = generate_tasks(tier_defs, output_dir, fullstack=not individual, curriculum=curriculum)
+    generated = generate_tasks(tier_defs, output_dir, combined=not individual, curriculum=curriculum)
 
     for slug in generated:
         task_dir = output_dir / slug
-        if slug == "full-stack":
-            from attractorbench.tiers import load_fullstack_tier
-            fullstack_def = load_fullstack_tier()
-            total_items = sum(t.total_items for t in fullstack_def.tiers)
-            console.print(f"  [green]✓[/green] {slug}/ ({total_items} DoD items, {fullstack_def.agent_timeout}s timeout)")
+        if slug == "main":
+            from attractorbench.tiers import load_main_tier
+            main_def = load_main_tier()
+            total_items = sum(t.total_items for t in main_def.tiers)
+            console.print(f"  [green]✓[/green] {slug}/ ({total_items} DoD items, {main_def.agent_timeout}s timeout)")
         else:
             # Find the matching tier
             tier = next((t for t in tier_defs if t.slug == slug), None)

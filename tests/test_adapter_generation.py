@@ -3,19 +3,19 @@ import unittest
 from attractorbench.adapter import (
     generate_docker_compose,
     generate_dockerfile,
-    generate_fullstack_score_py,
     generate_harvest_litellm,
     generate_instruction,
     generate_litellm_config,
     generate_llm_judge_py,
+    generate_main_score_py,
+    generate_main_test_sh,
     generate_mock_server,
     generate_run_conformance,
     generate_score_py,
-    generate_fullstack_test_sh,
     generate_task_toml,
     generate_test_sh,
 )
-from attractorbench.tiers import load_fullstack_tier
+from attractorbench.tiers import load_main_tier
 from attractorbench.tiers import TierDef
 
 
@@ -230,17 +230,17 @@ class AdapterGenerationTests(unittest.TestCase):
         # Harbor uploads tests at verify time - no COPY needed
         self.assertNotIn("COPY tests/", dockerfile)
 
-    def test_fullstack_test_sh_uses_full_suite(self) -> None:
-        fullstack = load_fullstack_tier()
-        script = generate_fullstack_test_sh(fullstack)
+    def test_main_test_sh_uses_full_suite(self) -> None:
+        main_tier = load_main_tier()
+        script = generate_main_test_sh(main_tier)
         self.assertIn("--tier 1", script)
         self.assertIn("--suite full", script)
 
     # --- Gate removal tests ---
 
-    def test_fullstack_test_sh_no_gate(self) -> None:
-        fullstack = load_fullstack_tier()
-        script = generate_fullstack_test_sh(fullstack)
+    def test_main_test_sh_no_gate(self) -> None:
+        main_tier = load_main_tier()
+        script = generate_main_test_sh(main_tier)
         self.assertNotIn("T2_CAN_ADVANCE", script)
         self.assertNotIn("skipped_due_to_tier2", script)
         # T3 runs unconditionally
@@ -249,17 +249,17 @@ class AdapterGenerationTests(unittest.TestCase):
 
     # --- LLM Judge tests ---
 
-    def test_fullstack_test_sh_has_phase4_judge(self) -> None:
-        fullstack = load_fullstack_tier()
-        script = generate_fullstack_test_sh(fullstack)
+    def test_main_test_sh_has_phase4_judge(self) -> None:
+        main_tier = load_main_tier()
+        script = generate_main_test_sh(main_tier)
         self.assertIn("Phase 4: LLM Judge", script)
         self.assertIn("llm_judge.py", script)
         self.assertIn("JUDGE_MODEL", script)
         self.assertIn("non-fatal", script)
 
-    def test_fullstack_test_sh_passes_llm_judge_to_score(self) -> None:
-        fullstack = load_fullstack_tier()
-        script = generate_fullstack_test_sh(fullstack)
+    def test_main_test_sh_passes_llm_judge_to_score(self) -> None:
+        main_tier = load_main_tier()
+        script = generate_main_test_sh(main_tier)
         self.assertIn("--llm-judge", script)
         self.assertIn("LLM_JUDGE_FLAG", script)
 
@@ -290,26 +290,26 @@ class AdapterGenerationTests(unittest.TestCase):
 
     # --- Updated score formula tests ---
 
-    def test_fullstack_score_py_has_judge_arg(self) -> None:
-        score = generate_fullstack_score_py()
+    def test_main_score_py_has_judge_arg(self) -> None:
+        score = generate_main_score_py()
         self.assertIn("--llm-judge", score)
 
-    def test_fullstack_score_py_has_judge_formula(self) -> None:
-        score = generate_fullstack_score_py()
+    def test_main_score_py_has_judge_formula(self) -> None:
+        score = generate_main_score_py()
         self.assertIn("0.25 * t1_rate", score)
         self.assertIn("0.25 * t2_rate", score)
         self.assertIn("0.25 * t3_rate", score)
         self.assertIn("0.15 * judge_score", score)
 
-    def test_fullstack_score_py_has_fallback_formula(self) -> None:
-        score = generate_fullstack_score_py()
+    def test_main_score_py_has_fallback_formula(self) -> None:
+        score = generate_main_score_py()
         # Fallback (no judge) should use 30/30/30
         self.assertIn("0.30 * t1_rate", score)
         self.assertIn("0.30 * t2_rate", score)
         self.assertIn("0.30 * t3_rate", score)
 
-    def test_fullstack_score_py_writes_judge_fields(self) -> None:
-        score = generate_fullstack_score_py()
+    def test_main_score_py_writes_judge_fields(self) -> None:
+        score = generate_main_score_py()
         self.assertIn("llm_judge_score", score)
         self.assertIn("llm_judge_stddev", score)
         self.assertIn("llm_judge_model", score)

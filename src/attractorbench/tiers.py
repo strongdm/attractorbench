@@ -189,32 +189,43 @@ TIER_DEFS: list[TierDef] = [
 ]
 
 
-FULLSTACK_SLUG = "full-stack"
-FULLSTACK_AGENT_TIMEOUT = 14400  # 4 hours
-FULLSTACK_VERIFIER_TIMEOUT = 900  # 15 minutes
+MAIN_SLUG = "main"
+MAIN_AGENT_TIMEOUT = 14400  # 4 hours
+MAIN_VERIFIER_TIMEOUT = 900  # 15 minutes
+
+# Backwards compatibility
+FULLSTACK_SLUG = MAIN_SLUG
 
 
 @dataclass
-class FullStackTierDef:
+class MainTierDef:
     """Combined task definition for tiers 1-3 in a single workspace."""
 
-    name: str  # "Full Stack"
-    slug: str  # "full-stack"
+    name: str  # "Main"
+    slug: str  # "main"
     tiers: list[TierDef]  # [tier1, tier2, tier3], ordered
     agent_timeout: int  # 14400
     verifier_timeout: int  # 900
 
 
-def load_fullstack_tier() -> FullStackTierDef:
-    """Load tiers 1, 2, 3 and bundle them into a single full-stack task."""
+# Backwards compatibility
+FullStackTierDef = MainTierDef
+
+
+def load_main_tier() -> MainTierDef:
+    """Load tiers 1, 2, 3 and bundle them into a single main task."""
     tiers = load_tiers([1, 2, 3])
-    return FullStackTierDef(
-        name="Full Stack",
-        slug=FULLSTACK_SLUG,
+    return MainTierDef(
+        name="Main",
+        slug=MAIN_SLUG,
         tiers=tiers,
-        agent_timeout=FULLSTACK_AGENT_TIMEOUT,
-        verifier_timeout=FULLSTACK_VERIFIER_TIMEOUT,
+        agent_timeout=MAIN_AGENT_TIMEOUT,
+        verifier_timeout=MAIN_VERIFIER_TIMEOUT,
     )
+
+
+# Backwards compatibility
+load_fullstack_tier = load_main_tier
 
 
 def load_tiers(tier_numbers: list[int] | None = None) -> list[TierDef]:

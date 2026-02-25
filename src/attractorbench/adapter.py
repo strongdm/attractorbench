@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from attractorbench import __version__ as _bench_version
-from attractorbench.tiers import FullStackTierDef, TierDef, load_fullstack_tier, load_tiers
+from attractorbench.tiers import MainTierDef, TierDef, load_main_tier, load_tiers
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 
@@ -3477,10 +3477,10 @@ if __name__ == "__main__":
 '''
 
 
-def generate_fullstack_task_toml(fullstack: FullStackTierDef) -> str:
-    """Generate task.toml for the combined full-stack task."""
-    tags = ["nlspec", "attractor", "coding-agent", "full-stack"]
-    for t in fullstack.tiers:
+def generate_main_task_toml(main: MainTierDef) -> str:
+    """Generate task.toml for the combined main task."""
+    tags = ["nlspec", "attractor", "coding-agent", "main"]
+    for t in main.tiers:
         tags.append(f"tier{t.tier}")
     tags_str = ", ".join(f'"{tag}"' for tag in tags)
     return f"""version = "1.0"
@@ -3494,10 +3494,10 @@ tags = [{tags_str}]
 benchmark_version = "{_bench_version}"
 
 [agent]
-timeout_sec = {fullstack.agent_timeout}.0
+timeout_sec = {main.agent_timeout}.0
 
 [verifier]
-timeout_sec = {fullstack.verifier_timeout}.0
+timeout_sec = {main.verifier_timeout}.0
 
 [environment]
 build_timeout_sec = 300.0
@@ -3508,20 +3508,20 @@ allow_internet = true
 """
 
 
-def generate_fullstack_instruction(fullstack: FullStackTierDef) -> str:
+def generate_main_instruction(main: MainTierDef) -> str:
     """Generate a short instruction.md that references spec files in the container.
 
     The full specifications are large (~300KB combined) and would overwhelm
     the agent's initial prompt.  Instead, we write them to files that the
     Dockerfile COPYs into /workspace/specs/ and reference them here.
     """
-    tier_map = {t.tier: t for t in fullstack.tiers}
+    tier_map = {t.tier: t for t in main.tiers}
     tier1 = tier_map[1]
     tier2 = tier_map[2]
     tier3 = tier_map[3]
 
     layer_summaries = []
-    for tier in fullstack.tiers:
+    for tier in main.tiers:
         conformance_contract = _conformance_contract(tier.tier)
         dod_checklist = ""
         for section in tier.sections:
@@ -3543,9 +3543,9 @@ def generate_fullstack_instruction(fullstack: FullStackTierDef) -> str:
 """)
 
     layers_text = "\n---\n\n".join(layer_summaries)
-    recommended_loop = _recommended_loop_for_fullstack()
+    recommended_loop = _recommended_loop_for_main()
 
-    return f"""# Full Stack - attractorbench Tiers 1-3
+    return f"""# attractorbench - Tiers 1-3
 
 You are building three layers of a software system in one workspace.
 Each layer builds on the previous layer's implementation.
@@ -3580,7 +3580,7 @@ Read each spec file before implementing its layer.
 """
 
 
-def _recommended_loop_for_fullstack() -> str:
+def _recommended_loop_for_main() -> str:
     return """## Recommended Loop (Layered Iteration)
 
 Run this loop repeatedly and advance layer-by-layer:
@@ -3603,20 +3603,20 @@ Do not stop at first failure; conformance output is the primary repair signal.
 """
 
 
-def generate_fullstack_spec_files(fullstack: FullStackTierDef) -> dict[str, str]:
+def generate_main_spec_files(main: MainTierDef) -> dict[str, str]:
     """Return a mapping of filename -> content for per-tier spec files.
 
     These are placed in the environment/specs/ directory and COPYd into the
     container at /workspace/specs/ by the Dockerfile.
     """
     specs: dict[str, str] = {}
-    for tier in fullstack.tiers:
+    for tier in main.tiers:
         specs[f"tier{tier.tier}_spec.md"] = tier.spec_path.read_text(encoding="utf-8")
     return specs
 
 
-def generate_fullstack_dockerfile(fullstack: FullStackTierDef) -> str:
-    """Dockerfile for the full-stack task.
+def generate_main_dockerfile(main: MainTierDef) -> str:
+    """Dockerfile for the main task.
 
     Extends the base Dockerfile with a COPY of the per-tier spec files into
     /workspace/specs/ so the agent can read them without the instruction.md
@@ -3652,10 +3652,10 @@ WORKDIR /workspace
 """
 
 
-def generate_fullstack_test_sh(fullstack: FullStackTierDef) -> str:
-    """Generate test.sh for the combined full-stack task."""
+def generate_main_test_sh(main: MainTierDef) -> str:
+    """Generate test.sh for the combined main task."""
     return f"""#!/bin/bash
-# attractorbench Full Stack: Tiers 1-3 - Verifier
+# attractorbench Main: Tiers 1-3 - Verifier
 set -uo pipefail
 set +e
 
@@ -3778,7 +3778,7 @@ exit 0
 def generate_llm_judge_py() -> str:
     """Generate the in-container LLM-as-judge evaluation script."""
     return '''#!/usr/bin/env python3
-"""LLM-as-judge evaluation for attractorbench full-stack task.
+"""LLM-as-judge evaluation for attractorbench main task.
 
 Evaluates the agent's implementation across 5 dimensions using an LLM judge.
 Uses urllib.request (stdlib only) to call an OpenAI-compatible API.
@@ -4108,10 +4108,10 @@ if __name__ == "__main__":
 '''
 
 
-def generate_fullstack_score_py() -> str:
-    """Generate the in-container scoring script for the full-stack task."""
+def generate_main_score_py() -> str:
+    """Generate the in-container scoring script for the main task."""
     return '''#!/usr/bin/env python3
-"""In-container score aggregation for attractorbench full-stack task.
+"""In-container score aggregation for attractorbench main task.
 
 Reads build/selftest/per-tier conformance results and produces reward.json.
 """
@@ -4434,15 +4434,15 @@ def generate_tasks(
     tiers: list[TierDef],
     output_dir: Path,
     *,
-    fullstack: bool = True,
+    combined: bool = True,
     curriculum: bool = False,
 ) -> list[str]:
     """Generate Harbor-compatible task directories for all tiers.
 
     Returns a list of generated task directory names (slugs).
 
-    When fullstack=True (default) and tiers 1, 2, 3 are all present,
-    they are merged into a single 'full-stack' task directory.
+    When combined=True (default) and tiers 1, 2, 3 are all present,
+    they are merged into a single 'main' task directory.
     Tier 0 is always generated individually.
     When curriculum=True, additional subtier tasks are generated.
     """
@@ -4453,11 +4453,11 @@ def generate_tasks(
     tier_numbers = {t.tier for t in tiers}
     stackable = {1, 2, 3}
     individual_tiers = []
-    do_fullstack = fullstack and stackable.issubset(tier_numbers)
+    do_combined = combined and stackable.issubset(tier_numbers)
 
     for tier in tiers:
-        if do_fullstack and tier.tier in stackable:
-            continue  # will be generated as part of full-stack
+        if do_combined and tier.tier in stackable:
+            continue  # will be generated as part of main task
         individual_tiers.append(tier)
 
     # Generate individual tier directories
@@ -4465,11 +4465,11 @@ def generate_tasks(
         _generate_individual_task(tier, output_dir)
         generated.append(tier.slug)
 
-    # Generate combined full-stack directory
-    if do_fullstack:
-        fullstack_def = load_fullstack_tier()
-        _generate_fullstack_task(fullstack_def, output_dir)
-        generated.append(fullstack_def.slug)
+    # Generate combined main task directory
+    if do_combined:
+        main_def = load_main_tier()
+        _generate_main_task(main_def, output_dir)
+        generated.append(main_def.slug)
 
     if curriculum:
         for tier in tiers:
@@ -4527,25 +4527,25 @@ def _generate_individual_task(tier: TierDef, output_dir: Path, *, suite: str = "
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
 
-def _generate_fullstack_task(fullstack: FullStackTierDef, output_dir: Path) -> None:
-    """Generate the combined full-stack Harbor task directory."""
+def _generate_main_task(main: MainTierDef, output_dir: Path) -> None:
+    """Generate the combined main Harbor task directory."""
     import stat
 
-    task_dir = output_dir / fullstack.slug
+    task_dir = output_dir / main.slug
     if task_dir.exists():
         shutil.rmtree(task_dir)
     task_dir.mkdir(parents=True)
 
     # task.toml
-    (task_dir / "task.toml").write_text(generate_fullstack_task_toml(fullstack))
+    (task_dir / "task.toml").write_text(generate_main_task_toml(main))
 
     # instruction.md (short - refs /workspace/specs/ for full text)
-    (task_dir / "instruction.md").write_text(generate_fullstack_instruction(fullstack))
+    (task_dir / "instruction.md").write_text(generate_main_instruction(main))
 
     # environment/Dockerfile + docker-compose + litellm config
     env_dir = task_dir / "environment"
     env_dir.mkdir()
-    (env_dir / "Dockerfile").write_text(generate_fullstack_dockerfile(fullstack))
+    (env_dir / "Dockerfile").write_text(generate_main_dockerfile(main))
     (env_dir / "docker-compose.yaml").write_text(generate_docker_compose())
     (env_dir / "litellm_config.yaml").write_text(generate_litellm_config())
     _write_starter_files(task_dir, default_tier=1)
@@ -4553,15 +4553,15 @@ def _generate_fullstack_task(fullstack: FullStackTierDef, output_dir: Path) -> N
     # environment/specs/ - per-tier specification files (COPYd into container)
     specs_dir = env_dir / "specs"
     specs_dir.mkdir()
-    for filename, content in generate_fullstack_spec_files(fullstack).items():
+    for filename, content in generate_main_spec_files(main).items():
         (specs_dir / filename).write_text(content)
 
     # tests/
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
-    (tests_dir / "test.sh").write_text(generate_fullstack_test_sh(fullstack))
+    (tests_dir / "test.sh").write_text(generate_main_test_sh(main))
     (tests_dir / "mock_server.py").write_text(generate_mock_server())
-    (tests_dir / "score.py").write_text(generate_fullstack_score_py())
+    (tests_dir / "score.py").write_text(generate_main_score_py())
     (tests_dir / "llm_judge.py").write_text(generate_llm_judge_py())
     (tests_dir / "harvest_litellm.py").write_text(generate_harvest_litellm())
 
