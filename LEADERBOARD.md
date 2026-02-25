@@ -12,35 +12,26 @@ For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
 
 ## Narrative
 
-Sonnet 4.6 leads at 0.840 on the main task. GPT-5.3-codex is close at 0.765 with the strongest T3 (96.3%). Opus 4.6 holds at 0.716. GPT-5.2 with high reasoning effort scores 0.600. Gemini remains the fastest and cheapest but trails substantially on conformance.
+GPT-5.3-codex leads at 0.808 with perfect T3 (100%). Sonnet 4.6 is close at 0.806 with the strongest T2 (89.5%). Opus 4.6 holds at 0.764. GPT-5.3-codex with effort:high scores 0.728. GPT-5.2 with high reasoning effort scores 0.600. Gemini remains the fastest and cheapest but trails substantially on conformance.
 
 Scoring: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge). Score reflects main task only (tier0 smoke test excluded).
 
 ## Current Bests
 
-Criteria:
-- Best score: highest composite score (main task only, excludes tier0).
-- Best speed: shortest wall time among runs with score > 0.
-- Best token efficiency: lowest tokens per score point.
-- Best dollar efficiency: lowest $ per score point.
-
 | Metric | Run | Agent | Model | Value |
 |--------|-----|-------|-------|-------|
-| Best score | sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.840 |
+| Best score | gpt53codex-v1 | codex | gpt-5.3-codex | 0.808 |
 | Best speed | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 12m26s |
-| Best token efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 4.1M tokens/point |
-| Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $8.80/point |
+| Best token efficiency | gpt53codex-high-v1 | codex | gpt-5.3-codex (high) | 5.2M tok/pt |
+| Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $15.80/pt |
 
 ## Snapshot Table (Best Per Agent/Model, By Score)
 
-> Scores reflect main task only (tier0 smoke test excluded).
-
 | Run | Agent | Model | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost |
 |-----|-------|-------|------:|---:|---:|---:|------:|-------:|-----:|-----:|
-| sonnet46-v3 | claude-code | claude-sonnet-4-6 | 0.840 | 82.3% | 68.4% | 88.9% | 60.0%* | 14.9M | 2h07m | $6.41 |
-| gpt53codex-v3 | codex | gpt-5.3-codex | 0.765 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 |
-| opus46-v8 | claude-code | claude-opus-4-6 | 0.716 | 23.5% | 84.2% | 88.9% | 50.0%* | 14.3M | 38m03s | $10.14 |
+| gpt53codex-v1 | codex | gpt-5.3-codex | 0.808 | 82.3% | 79.0% | 100.0% | 70.0% | 4.7M | 17m23s | $9.11 |
+| sonnet46-v8 | claude-code | claude-sonnet-4-6 | 0.806 | 73.5% | 89.5% | 96.3% | 50.0% | 14.9M | 23m03s | $6.84 |
+| opus46-v9 | claude-code | claude-opus-4-6 | 0.764 | 64.7% | 84.2% | 92.6% | 40.0% | 17.3M | 24m42s | $10.24 |
+| gpt53codex-high-v1 | codex | gpt-5.3-codex (high) | 0.728 | 82.3% | 73.7% | 85.2% | 50.0% | 3.8M | 14m44s | $7.37 |
 | gpt52-high-v3 | codex | gpt-5.2 (high) | 0.600 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 |
-| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.362 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | $6.94 |
-
-\* Judge used GPT-4o (pre-upgrade). All other judge scores use GPT-5.2 (reasoning_effort=high).
+| gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.361 | 20.6% | 31.6% | 22.2% | 50.0% | 3.3M | 30m19s | $6.94 |

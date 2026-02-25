@@ -25,7 +25,12 @@ _CANONICAL_TASKS = {
     "full-stack",  # backwards compat with old job dirs
 }
 
-_TIER0_TASKS = {"tier0-smoke-test"}
+_TIER0_PREFIX = "tier0-smoke-test"
+
+
+def _is_tier0_task(task_name: str) -> bool:
+    """Check if a task name refers to the tier0 smoke test."""
+    return task_name.startswith(_TIER0_PREFIX)
 
 
 def _is_curriculum_task_name(task_name: str) -> bool:
@@ -351,7 +356,7 @@ def build_leaderboard(job_dirs: list[Path], *, include_curriculum: bool = False)
         # check, not a benchmark task.  The headline score should reflect
         # only the substantive task(s).
         scored_results = {k: v for k, v in results.items()
-                         if k.split("#", 1)[0] not in _TIER0_TASKS}
+                         if not _is_tier0_task(k)}
         if not scored_results:
             scored_results = results  # fallback: tier0-only job
 
@@ -585,7 +590,7 @@ def build_run_log(job_dirs: list[Path]) -> list[RunLogEntry]:
 
         # Exclude tier0 from aggregate scores (same as leaderboard)
         scored_results = {k: v for k, v in results.items()
-                         if k.split("#", 1)[0] not in _TIER0_TASKS}
+                         if not _is_tier0_task(k)}
         if not scored_results:
             scored_results = results  # fallback: tier0-only job
 
