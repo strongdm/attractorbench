@@ -7,15 +7,14 @@ V ?= 1
 EXTRA_ARGS ?=
 
 results:
-	@mkdir -p results
 	@JOB_DIRS="$$(find jobs -maxdepth 1 -mindepth 1 -type d -print)"; \
 		if [ -z "$$JOB_DIRS" ]; then \
 			echo "No Harbor job directories found under jobs/"; \
 			exit 1; \
 		fi; \
-		uv run attractorbench leaderboard $$JOB_DIRS --markdown > results/leaderboard.md; \
-		uv run attractorbench run-log $$JOB_DIRS --markdown > results/run_log.md; \
-		echo "Wrote ad hoc tables to results/*.md (gitignored). Update LEADERBOARD.md and RUN_LOG.md manually."
+		uv run attractorbench leaderboard $$JOB_DIRS --markdown > LEADERBOARD.md; \
+		uv run attractorbench run-log $$JOB_DIRS --markdown > RUN_LOG.md; \
+		echo "Updated LEADERBOARD.md and RUN_LOG.md"
 
 specs-sync:
 	python3 scripts/sync_specs.py
