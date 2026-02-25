@@ -18,8 +18,6 @@ Comparability policy:
 
 ## bench_version=2.0.0 (2026-02-25)
 
-Changes: T2→T3 gate removed, LLM-as-judge added (15% weight), scoring formula updated.
-
 | Run | Agent | Model | Effort | Tasks | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost | Date | Notes |
 |-----|-------|-------|--------|------:|------:|---:|---:|---:|------:|-------:|-----:|-----:|------|-------|
 | gpt53codex-v3 | codex | gpt-5.3-codex | unknown | 2 | 0.833 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 | 2026-02-25 | judge upgraded to gpt-5.2 |
@@ -37,8 +35,6 @@ Changes: T2→T3 gate removed, LLM-as-judge added (15% weight), scoring formula 
 | sonnet46-v1 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.624 | 14.7% | 15.8% | 18.5% | 50.0% | 26.9M | 35m34s | $10.33 | 2026-02-24 | first v2.0.0 run, pre-diags_list fix |
 
 ## bench_version=1.0.0 (2026-02-22 to 2026-02-24)
-
-Scoring: 5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3 (T3 always gated to 0%).
 
 | Run | Agent | Model | Effort | Tasks | Score | Tokens | Time | Cost | Date | Notes |
 |-----|-------|-------|--------|------:|------:|-------:|-----:|-----:|------|-------|

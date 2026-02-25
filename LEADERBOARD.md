@@ -10,31 +10,13 @@ For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
 > authoritative values from Harbor's `result.json` + litellm pricing tables.
 > Never write `-` or guess — run `make results` and copy the numbers.
 
-Comparability policy:
-- Breaking benchmark changes are versioned.
-- Only runs on the same benchmark version are directly comparable.
-- Historical logs are still retained for context and trend analysis.
-
 ## Narrative
 
-**Benchmark v2.0.0** introduced two major changes:
-1. **T2→T3 gate removed** — T3 conformance now runs unconditionally (was previously skipped when T2's `process_input` test failed, forfeiting 30% of the composite).
-2. **LLM-as-judge evaluation** — a new Phase 4 evaluates 5 dimensions (spec coverage, architectural compliance, error handling, test quality, code quality) via GPT-5.2 (reasoning_effort=high) judge calls through the LiteLLM proxy.
+Sonnet 4.6 leads at 0.840 on the main task. GPT-5.3-codex is close at 0.765 with the strongest T3 (96.3%). Opus 4.6 holds at 0.716. GPT-5.2 with high reasoning effort scores 0.600. Gemini remains the fastest and cheapest but trails substantially on conformance.
 
-New scoring formula: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge).
+Scoring: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge). Score reflects main task only (tier0 smoke test excluded).
 
-**Judge model upgraded (2026-02-25):** The LLM judge was switched from GPT-4o to GPT-5.2 (reasoning_effort=high) for stronger evaluation signal. Earlier runs used the GPT-4o judge; runs from gpt53codex-v3 / gpt52-high-v3 onward use GPT-5.2.
-
-GPT-5.3-codex leads among GPT models at 0.765 (T3: 96.3%). GPT-5.2 with high reasoning effort scores 0.600 (T3: 92.6%). Both show strong T3 conformance but weaker T1. Sonnet 4.6 retains the overall lead at 0.840 (with the earlier GPT-4o judge). Opus 4.6 holds at 0.716. Gemini remains the fastest and cheapest but trails substantially on conformance.
-
-> **Scoring change:** Tier 0 (smoke test) is no longer included in the headline score.
-> The score now reflects only the main task (tiers 1-3 combined).
-
-> **v1.0.0 → v2.0.0 migration:** Scores are not directly comparable across versions.
-> v1.0.0 runs had T3 gated (always 0%) and no judge component. v2.0.0 runs typically
-> score higher because T3 conformance is now measured.
-
-## Current Bests (bench_version=2.0.0)
+## Current Bests
 
 Criteria:
 - Best score: highest composite score (main task only, excludes tier0).
@@ -49,7 +31,7 @@ Criteria:
 | Best token efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | 4.1M tokens/point |
 | Best dollar efficiency | gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | $8.80/point |
 
-## Snapshot Table (bench_version=2.0.0, Best Per Agent/Model, By Score)
+## Snapshot Table (Best Per Agent/Model, By Score)
 
 > Scores reflect main task only (tier0 smoke test excluded).
 
@@ -62,13 +44,3 @@ Criteria:
 | gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.362 | 20.6% | 31.6% | 22.2% | 50.0%* | 3.3M | 27m56s | $6.94 |
 
 \* Judge used GPT-4o (pre-upgrade). All other judge scores use GPT-5.2 (reasoning_effort=high).
-
-## Historical Bests (bench_version=1.0.0)
-
-| Run | Agent | Model | Score | T1 | T2 | T3 | Tokens | Time | Cost |
-|-----|-------|-------|------:|---:|---:|---:|-------:|-----:|-----:|
-| sonnet46-v2 | claude-code | claude-sonnet-4-6 | 0.746 | - | - | 0% | 4.8M | 27m35s | $6.79 |
-| sonnet46-v1 | claude-code | claude-sonnet-4-6 | 0.729 | - | - | 0% | 26.3M | 39m34s | $11.14 |
-| gpt52-codex-v1 | codex | gpt-5.2 | 0.701 | - | - | 0% | 5.1M | 18m21s | $9.77 |
-| opus46-v1 | claude-code | claude-opus-4-6 | 0.680 | - | - | 0% | 16.6M | 33m05s | $15.05 |
-| gemini31ct-v1 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.624 | - | - | 0% | 191K | 15m59s | $0.41 |
