@@ -1,5 +1,5 @@
 .PHONY: results specs-sync specs-update generate test \
-	run-sonnet run-opus run-gpt52 \
+	run-sonnet run-opus run-gpt52 run-gpt53-high \
 	run-gemini31 run-gemini31ct run-gemini25pro \
 	run-gemini31ct-opencode
 
@@ -62,6 +62,13 @@ run-gpt52: generate
 	harbor run --path ./tasks --agent codex --model openai/gpt-5.2 \
 		--env docker --timeout-multiplier 2 --job-name gpt52-codex-v$(V) $(EXTRA_ARGS)
 	uv run attractorbench score jobs/gpt52-codex-v$(V)
+	$(MAKE) results
+
+run-gpt53-high: generate
+	harbor run --path ./tasks --agent codex --model openai/gpt-5.3-codex \
+		--env docker --timeout-multiplier 2 --agent-kwarg reasoning_effort=high \
+		--job-name gpt53codex-high-v$(V) $(EXTRA_ARGS)
+	uv run attractorbench score jobs/gpt53codex-high-v$(V)
 	$(MAKE) results
 
 run-gemini31: generate
