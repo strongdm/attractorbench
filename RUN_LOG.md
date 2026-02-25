@@ -1,27 +1,46 @@
 # AttractorBench Run Log
 
-Per-job benchmark run history with scores, token usage, and cost.
+Comprehensive historical run ledger for AttractorBench.
 
-| Run | Bench Version | Agent | Model | Effort | Tasks | Score | Tokens | Time | Tool Calls | Cost | Date |
-|-----|---------------|-------|-------|--------|------:|------:|-------:|-----:|-----------:|-----:|------|
-| sonnet46-v7 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.771 | 23.5M | 1h09m | 135 | $13.29 | 2026-02-24 |
-| sonnet46-v6 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.713 | 68.5M | 1h07m | 423 | $26.29 | 2026-02-24 |
-| sonnet46-v1 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.624 | 26.9M | 35m34s | 181 | $10.33 | 2026-02-24 |
-| gemini31ct-opencode-v5 | unknown | opencode | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.254 | - | 7s | - | - | 2026-02-24 |
-| gemini31ct-v6 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.433 | 40K | 7m32s | 39 | $0.09 | 2026-02-24 |
-| gpt52-codex-v5 | unknown | codex | gpt-5.2 | unknown | 2 | 0.561 | 6.0M | 22m29s | 100 | $11.60 | 2026-02-24 |
-| gemini31ct-opencode-v3 | unknown | opencode | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.254 | - | 6s | - | - | 2026-02-24 |
-| gemini31ct-stacked-v3 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.454 | 101K | 7m22s | 58 | $0.23 | 2026-02-24 |
-| opus46-stacked-v3 | unknown | claude-code | claude-opus-4-6 | unknown | 1 | 1.000 | - | 2m22s | - | - | 2026-02-24 |
-| gemini31ct-stacked-v2 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.478 | 195K | 15m10s | 103 | $0.40 | 2026-02-23 |
-| sonnet46-v4 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.738 | 34.7M | 38m00s | 219 | $15.55 | 2026-02-24 |
-| sonnet46-v3 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.870 | 14.9M | 2h07m | 109 | $6.41 | 2026-02-25 |
-| sonnet46-v5 | unknown | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.722 | 42.9M | 2h26m | 265 | $18.38 | 2026-02-24 |
-| sonnet46-stacked-v3 | unknown | claude-code | claude-sonnet-4-6 | unknown | 1 | 1.000 | - | 1m39s | - | - | 2026-02-24 |
-| gemini31ct-v2 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.599 | 151K | 11m40s | 76 | $0.32 | 2026-02-24 |
-| gemini31ct-v5 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 1 | 0.900 | 29K | 2m03s | 19 | $0.07 | 2026-02-24 |
-| gemini31ct-v3 | unknown | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.624 | 2.5M | 12m26s | 44 | $5.49 | 2026-02-25 |
-| opus46-v2 | unknown | claude-code | claude-opus-4-6 | unknown | 2 | 0.815 | 20.3M | 37m19s | 148 | $12.82 | 2026-02-24 |
-| opus46-v5 | unknown | claude-code | claude-opus-4-6 | unknown | 2 | 0.739 | 19.3M | 1h01m | 134 | $13.73 | 2026-02-24 |
-| opus46-v4 | unknown | claude-code | claude-opus-4-6 | unknown | 2 | 0.761 | 16.4M | 25m43s | 99 | $9.95 | 2026-02-24 |
-| opus46-v3 | unknown | claude-code | claude-opus-4-6 | unknown | 1 | 0.900 | - | 3m22s | - | - | 2026-02-25 |
+- Historical entries are retained even when benchmark versions evolve.
+- From **2026-02-23** onward, every run should record:
+  - `bench_version` (for comparability scope)
+  - `effort` (for example: `medium`, `high`, `extra_high`)
+
+Comparability policy:
+- **Only runs with the same `bench_version` are directly comparable.**
+- Breaking benchmark changes are versioned; comparability naturally decays over time.
+
+## bench_version=2.0.0 (2026-02-25)
+
+Changes: T2→T3 gate removed, LLM-as-judge added (15% weight), scoring formula updated.
+
+| Run | Agent | Model | Effort | Tasks | Score | T1 | T2 | T3 | Judge | Tokens | Time | Cost | Date | Notes |
+|-----|-------|-------|--------|------:|------:|---:|---:|---:|------:|-------:|-----:|-----:|------|-------|
+| sonnet46-v3 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.870 | 82.3% | 68.4% | 88.9% | 60.0% | 14.9M | 2h07m | $6.41 | 2026-02-25 | first clean v2.0.0 sonnet run |
+| opus46-v3 | claude-code | claude-opus-4-6 | unknown | 2 | 0.784 | 23.5% | 89.5% | 92.6% | 60.0% | 10.8M | 25m55s | $7.19 | 2026-02-25 | first clean v2.0.0 opus run |
+| gemini31ct-v3 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.624 | 17.6% | 15.8% | 55.6% | 50.0% | 2.5M | 12m26s | $5.49 | 2026-02-25 | first clean v2.0.0 gemini run |
+| opus46-v2 | claude-code | claude-opus-4-6 | unknown | 2 | 0.815 | 85.3% | 94.7% | 0.0% | 60.0% | 20.3M | 37m19s | $12.82 | 2026-02-24 | T3 crashed (diags_list null bug) |
+| gemini31ct-v2 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.599 | 14.7% | 15.8% | 18.5% | 50.0% | 151K | 11m40s | $0.32 | 2026-02-24 | pre-diags_list fix |
+| sonnet46-v1 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.624 | 14.7% | 15.8% | 18.5% | 50.0% | 26.9M | 35m34s | $10.33 | 2026-02-24 | first v2.0.0 run, pre-diags_list fix |
+
+## bench_version=1.0.0 (2026-02-22 to 2026-02-24)
+
+Scoring: 5% build + 5% self-test + 30% T1 + 30% T2 + 30% T3 (T3 always gated to 0%).
+
+| Run | Agent | Model | Effort | Tasks | Score | Tokens | Time | Cost | Date | Notes |
+|-----|-------|-------|--------|------:|------:|-------:|-----:|-----:|------|-------|
+| sonnet46-v2 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.746 | 4.8M | 27m35s | $6.79 | 2026-02-23 | |
+| sonnet46-v1 | claude-code | claude-sonnet-4-6 | unknown | 2 | 0.729 | 26.3M | 39m34s | $11.14 | 2026-02-23 | |
+| gpt52-codex-v1 | codex | gpt-5.2 | unknown | 2 | 0.701 | 5.1M | 18m21s | $9.77 | 2026-02-23 | |
+| opus46-v1 | claude-code | claude-opus-4-6 | unknown | 2 | 0.680 | 16.6M | 33m05s | $15.05 | 2026-02-23 | |
+| gemini31ct-opencode-v1 | opencode | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.640 | 6.9M | 20m15s | $14.34 | 2026-02-23 | |
+| gemini31ct-v1 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 2 | 0.624 | 191K | 15m59s | $0.41 | 2026-02-23 | tokens underreported (no LiteLLM proxy) |
+| gpt52-codex-v2 | codex | gpt-5.2 | high | 2 | 0.596 | 12.1M | 31m28s | $22.53 | 2026-02-23 | |
+| gemini31-v3 | gemini-cli | gemini-3.1-pro-preview | unknown | 2 | 0.559 | 181K | 9m34s | $0.41 | 2026-02-22 | tokens underreported |
+| gpt52codex-codex-v1 | codex | gpt-5.2-codex | unknown | 2 | 0.525 | 6.7M | 18m38s | $12.67 | 2026-02-23 | |
+| gemini31-v1 | gemini-cli | gemini-3.1-pro-preview | unknown | 2 | 0.450 | 91K | 1m35s | $0.23 | 2026-02-22 | |
+| gemini31-v2 | gemini-cli | gemini-3.1-pro-preview | unknown | 2 | 0.383 | 58K | 1m22s | $0.15 | 2026-02-22 | |
+| gemini25pro-v1 | gemini-cli | gemini-2.5-pro | unknown | 2 | 0.450 | 448K | 2m09s | $0.65 | 2026-02-22 | |
+| gemini25pro-v3 | gemini-cli | gemini-2.5-pro | unknown | 2 | 0.550 | 22.5M | 35m12s | $29.74 | 2026-02-22 | |
+| gemini25pro-v2 | gemini-cli | gemini-2.5-pro | unknown | 2 | 0.275 | 7.5M | 13m24s | $9.96 | 2026-02-22 | |
