@@ -14,7 +14,7 @@ Comparability policy:
 
 **Benchmark v2.0.0** introduced two major changes:
 1. **T2→T3 gate removed** — T3 conformance now runs unconditionally (was previously skipped when T2's `process_input` test failed, forfeiting 30% of the composite).
-2. **LLM-as-judge evaluation** — a new Phase 4 evaluates 5 dimensions (spec coverage, architectural compliance, error handling, test quality, code quality) via GPT-4o judge calls through the LiteLLM proxy.
+2. **LLM-as-judge evaluation** — a new Phase 4 evaluates 5 dimensions (spec coverage, architectural compliance, error handling, test quality, code quality) via GPT-5.2 (reasoning_effort=high) judge calls through the LiteLLM proxy.
 
 New scoring formula: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge).
 

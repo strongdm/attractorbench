@@ -3701,7 +3701,7 @@ echo "Tier 3 conformance exit code: $CONF3_EXIT" | tee -a /logs/verifier/conform
 
 # Phase 4: LLM Judge (non-fatal)
 echo "=== Phase 4: LLM Judge ===" | tee /logs/verifier/llm_judge.log
-JUDGE_MODEL="${{ATTRACTORBENCH_JUDGE_MODEL:-gpt-4o}}"
+JUDGE_MODEL="${{ATTRACTORBENCH_JUDGE_MODEL:-gpt-5.2}}"
 JUDGE_BASE_URL="${{ATTRACTORBENCH_JUDGE_BASE_URL:-http://litellm:4000/v1}}"
 python3 /tests/llm_judge.py \
   --specs-dir /workspace/specs --workspace-dir /workspace \
@@ -3952,6 +3952,7 @@ Example: {{"reasoning": "The implementation covers most spec sections...", "scor
         ],
         "temperature": 0.0,
         "max_tokens": 500,
+        "reasoning_effort": "high",
         "response_format": {"type": "json_object"},
     }
 
@@ -3982,7 +3983,7 @@ def main():
     parser.add_argument("--workspace-dir", required=True)
     parser.add_argument("--conformance-dir", required=True)
     parser.add_argument("--output", required=True)
-    parser.add_argument("--judge-model", default="gpt-4o")
+    parser.add_argument("--judge-model", default="gpt-5.2")
     parser.add_argument("--judge-base-url", default="http://litellm:4000/v1")
     args = parser.parse_args()
 
