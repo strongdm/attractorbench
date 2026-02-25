@@ -3336,7 +3336,46 @@ def parse_proxy_log(log_path: Path) -> dict:
     }
 
 
+HARBOR_TRAJECTORY = Path("/logs/agent/trajectory.json")
 GEMINI_TRAJECTORY = Path("/logs/agent/gemini-cli.trajectory.json")
+
+
+def parse_harbor_trajectory(traj_path: Path) -> dict:
+    """Parse Harbor's generic trajectory.json for token usage (Claude Code, Codex, etc.)."""
+    if not traj_path.exists():
+        return {}
+
+    try:
+        with open(traj_path) as f:
+            trajectory = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    metrics = trajectory.get("final_metrics")
+    if not isinstance(metrics, dict):
+        return {}
+
+    prompt_tokens = metrics.get("total_prompt_tokens", 0) or 0
+    completion_tokens = metrics.get("total_completion_tokens", 0) or 0
+    total_tokens = prompt_tokens + completion_tokens
+
+    # Some trajectories include total_tokens in extra
+    extra = metrics.get("extra", {})
+    if isinstance(extra, dict) and extra.get("total_tokens"):
+        total_tokens = extra["total_tokens"]
+
+    if total_tokens == 0:
+        return {}
+
+    return {
+        "total_tokens": total_tokens,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost_usd": None,
+        "request_count": metrics.get("total_steps", 0),
+        "models_seen": [],
+        "source": "harbor-trajectory",
+    }
 
 
 def parse_gemini_trajectory(traj_path: Path) -> dict:
@@ -3392,10 +3431,14 @@ def main():
 
     usage = parse_proxy_log(PROXY_LOG)
 
-    # Fallback: if LiteLLM had no token data, try the Gemini trajectory
+    # Fallback chain: LiteLLM proxy → Gemini trajectory → Harbor generic trajectory
     if not usage and GEMINI_TRAJECTORY.exists():
         print("  No LiteLLM usage data; falling back to Gemini trajectory")
         usage = parse_gemini_trajectory(GEMINI_TRAJECTORY)
+
+    if not usage and HARBOR_TRAJECTORY.exists():
+        print("  No LiteLLM usage data; falling back to Harbor trajectory")
+        usage = parse_harbor_trajectory(HARBOR_TRAJECTORY)
 
     bench_version = os.environ.get("ATTRACTORBENCH_VERSION", "")
 
