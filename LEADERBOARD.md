@@ -1,6 +1,6 @@
 # AttractorBench Leaderboard Snapshot
 
-**As of date:** 2026-02-25
+**As of date:** 2026-02-26
 
 This file is a **curated summary snapshot** (manually maintained).
 For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
@@ -12,7 +12,7 @@ For the complete historical ledger, see [RUN_LOG.md](RUN_LOG.md).
 
 ## Narrative
 
-GPT-5.3-codex leads at 0.808 with perfect T3 (100%). Sonnet 4.6 is close at 0.806 with the strongest T2 (89.5%). Opus 4.6 holds at 0.764. GPT-5.3-codex with effort:high scores 0.728. GPT-5.2 with high reasoning effort scores 0.600. Gemini improved to 0.395 (v12) with its best T1 (38.2%) and T2 (57.9%) yet, but still trails substantially on conformance.
+GPT-5.3-codex leads at 0.808 with perfect T3 (100%). Sonnet 4.6 is close at 0.806 with the strongest T2 (89.5%). Opus 4.6 holds at 0.764. GPT-5.3-codex with effort:high scores 0.728. GPT-5.2 with high reasoning effort scores 0.600. Gemini jumped to 0.508 (v13) — its best run yet — with T3 rising from 0% to 46.3%, but still trails substantially.
 
 Scoring: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls back to 30/30/30 without judge). Score reflects main task only (tier0 smoke test excluded).
 
@@ -34,4 +34,4 @@ Scoring: `5% build + 5% self-test + 25% T1 + 25% T2 + 25% T3 + 15% judge` (falls
 | opus46-v9 | claude-code | claude-opus-4-6 | 0.764 | 64.7% | 84.2% | 92.6% | 40.0% | 17.3M | 24m42s | $10.24 |
 | gpt53codex-high-v1 | codex | gpt-5.3-codex (high) | 0.728 | 82.3% | 73.7% | 85.2% | 50.0% | 3.8M | 14m44s | $7.37 |
 | gpt52-high-v3 | codex | gpt-5.2 (high) | 0.600 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 |
-| gemini31ct-v12 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.395 | 38.2% | 57.9% | 0.0% | 50.0% | 6.7M | 16m40s | $13.97 |
+| gemini31ct-v13 | gemini-cli | gemini-3.1-pro-preview-customtools | 0.508 | 35.3% | 60.5% | 46.3% | 45.0% | 5.8M | 18m54s | $12.05 |

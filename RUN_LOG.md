@@ -17,18 +17,23 @@ Score reflects main task only (tier0 smoke test excluded).
 | sonnet46-v8 | claude-code | claude-sonnet-4-6 | unknown | 0.806 | 73.5% | 89.5% | 96.3% | 50.0% | 14.9M | 23m03s | $6.84 | 2026-02-25 |
 | sonnet46-v10 | claude-code | claude-sonnet-4-6 | unknown | 0.798 | 82.3% | 89.5% | 85.2% | 36.7% | 26.5M | 35m31s | $10.89 | 2026-02-25 |
 | sonnet46-v12 | claude-code | claude-sonnet-4-6 | unknown | 0.795 | 82.3% | 79.0% | 92.6% | 40.0% | 32.3M | 38m30s | $12.51 | 2026-02-25 |
+| sonnet46-v13 | claude-code | claude-sonnet-4-6 | unknown | 0.779 | 69.1% | 84.2% | 94.4% | 40.0% | 29.9M | 57m25s | $14.60 | 2026-02-26 |
 | gpt53codex-v3 | codex | gpt-5.3-codex | unknown | 0.765 | 73.5% | 84.2% | 96.3% | 53.3% | 8.0M | 21m11s | $15.06 | 2026-02-25 |
 | opus46-v9 | claude-code | claude-opus-4-6 | unknown | 0.764 | 64.7% | 84.2% | 92.6% | 40.0% | 17.3M | 24m42s | $10.24 | 2026-02-25 |
 | sonnet46-v3 | claude-code | claude-sonnet-4-6 | unknown | 0.739 | 82.3% | 68.4% | 88.9% | 60.0% | 14.9M | 2h07m | $6.41 | 2026-02-25 |
 | gpt53codex-high-v1 | codex | gpt-5.3-codex | high | 0.728 | 82.3% | 73.7% | 85.2% | 50.0% | 3.8M | 14m44s | $7.37 | 2026-02-25 |
+| gpt53codex-high-v13 | codex | gpt-5.3-codex | high | 0.728 | 73.5% | 71.0% | 90.7% | 50.0% | 17.3M | 35m23s | $32.09 | 2026-02-26 |
 | gpt53codex-high-v12 | codex | gpt-5.3-codex | high | 0.721 | 73.5% | 68.4% | 96.3% | 50.0% | 6.5M | 18m09s | $12.43 | 2026-02-25 |
 | opus46-v3 | claude-code | claude-opus-4-6 | unknown | 0.669 | 23.5% | 89.5% | 92.6% | 50.0% | 10.8M | 25m55s | $7.19 | 2026-02-25 |
+| opus46-v13 | claude-code | claude-opus-4-6 | unknown | 0.654 | 23.5% | 81.6% | 96.3% | 50.0% | 42.9M | 1h11m | $33.98 | 2026-02-26 |
 | opus46-v2 | claude-code | claude-opus-4-6 | unknown | 0.630 | 85.3% | 94.7% | 0.0% | 60.0% | 20.3M | 37m19s | $12.82 | 2026-02-24 |
 | opus46-v12 | claude-code | claude-opus-4-6 | unknown | 0.628 | 23.5% | 84.2% | 81.5% | 50.0% | 18.8M | 26m33s | $10.96 | 2026-02-25 |
 | opus46-v8 | claude-code | claude-opus-4-6 | unknown | 0.617 | 23.5% | 84.2% | 88.9% | 50.0% | 14.3M | 38m03s | $10.14 | 2026-02-25 |
 | gpt52-high-v3 | codex | gpt-5.2 (high) | high | 0.600 | 23.5% | 73.7% | 92.6% | 50.0% | 5.4M | 21m49s | $10.43 | 2026-02-25 |
 | gpt52-high-v12 | codex | gpt-5.2 (high) | high | 0.594 | 17.6% | 73.7% | 96.3% | 50.0% | 10.1M | 24m22s | $18.67 | 2026-02-25 |
+| gpt52-high-v13 | codex | gpt-5.2 (high) | high | 0.588 | 23.5% | 73.7% | 88.9% | 48.4% | 13.7M | 57m00s | $25.92 | 2026-02-26 |
 | gpt52-high-v1 | codex | gpt-5.2 (high) | high | 0.560 | 23.5% | 57.9% | 92.6% | 50.0% | 5.4M | 20m58s | $10.29 | 2026-02-25 |
+| gemini31ct-v13 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 0.508 | 35.3% | 60.5% | 46.3% | 45.0% | 5.8M | 18m54s | $12.05 | 2026-02-26 |
 | gpt53codex-v2 | codex | gpt-5.3-codex | unknown | 0.496 | 73.5% | 42.1% | 63.0% | 0.0% | 5.6M | 20m42s | $10.92 | 2026-02-25 |
 | gemini31ct-v12 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 0.395 | 38.2% | 57.9% | 0.0% | 50.0% | 6.7M | 16m40s | $13.97 | 2026-02-25 |
 | gemini31ct-v7 | gemini-cli | gemini-3.1-pro-preview-customtools | unknown | 0.361 | 20.6% | 31.6% | 22.2% | 50.0% | 3.3M | 30m19s | $6.94 | 2026-02-25 |
